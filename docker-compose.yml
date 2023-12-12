@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  socket-io:
+    build:
+      context: ./
+      dockerfile: ./Dockerfiles/socket-io
+    volumes:
+      - ~/:/usr/src/app
+    working_dir: /usr/src/app
+    command: node dist/app.js
+    ports:
+      - 10080:10080
+      - 10443:10443
+    environment:
+      - IS_DOCKER=true
+      - REDIS_HOST=redis
+      - POSTGRES_HOST=postgres
+    networks:
+      - ch-network
+  postgres:
+    image: postgres
+    restart: always
+    environment:
+      POSTGRES_PASSWORD: example
+  redis:
+    image: redis
+    restart: always
+  certbot:
+    image: certbot/certbot
+    volumes:
+      - ./certs:/etc/letsencrypt
+    entrypoint: /bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait ${!}; done;'
+
+  adminer:
+    image: adminer
+    restart: always
+    ports:
+      - 8080:8080
+
+networks:
+  ch-network:

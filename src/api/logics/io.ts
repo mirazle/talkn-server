@@ -1,9 +1,10 @@
-import { Socket } from 'socket.io';
+import { Socket, Server } from 'socket.io';
 import Sequence from '../../Sequence';
+import SocketIo from '../listens/io';
 
-export default class Io {
+export default class IoLogic {
   io: any;
-  constructor(socketIo: any) {
+  constructor(socketIo: SocketIo) {
     this.io = socketIo;
     return this;
   }

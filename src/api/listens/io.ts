@@ -1,22 +1,27 @@
 import https from 'https';
-import { createClient } from 'redis';
-
-import { Socket, Server as IoServer } from 'socket.io';
-import { createAdapter } from 'socket.io-redis';
+import { Socket, Server } from 'socket.io';
+import { createAdapter } from "@socket.io/redis-adapter";
+import { Cluster } from "ioredis";
+import { createClient } from "redis";
 
 import conf from '../../conf';
 
 type State = any;
 
-class SocketIo {
-  io: IoServer;
+class TalknApi {
+  io: Server;
   constructor() {
     const httpsServer = https.createServer(conf.ssl);
     httpsServer.listen(conf.io.port);
-    this.io = new IoServer(httpsServer, { cors: { credentials: true } });
-    const pubClient = createClient({url: `redis://${conf.redis.host}:${conf.redis.port}`});
+    this.io = new Server(httpsServer, { cors: { credentials: true } });
+    const pubClient = createClient({ url: `redis://${TalknRedis.host}:${conf.redis.port}` });
+//    const pubClient = new Cluster(TalknRedis.cluster);
     const subClient = pubClient.duplicate();
-    this.io.adapter(createAdapter({ pubClient, subClient }));
+
+    pubClient.on('error', TalknRedis.pubError);
+    subClient.on('error', TalknRedis.subError);
+
+    this.io.adapter(createAdapter(pubClient, subClient))
   }
 
   async get() {
@@ -36,4 +41,22 @@ class SocketIo {
   }
 }
 
-export default SocketIo;
+class TalknRedis {
+  static get host() {
+    return process.env.REDIS_HOST || 'localhost'
+  }
+  static get cluster() {
+    return [{host: TalknRedis.host, port: 6379}]
+  }
+
+  static pubError(err: string) {
+    console.error('Redis pubClient error:', err);
+  }
+
+  static subError(err: string) {
+    console.error('Redis subClient error:', err);
+  }
+}
+
+
+export default TalknApi;

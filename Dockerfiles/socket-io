@@ -1,0 +1,22 @@
+FROM amazonlinux:2023
+
+ENV NVM_DIR /root/.nvm
+ENV NODE_VERSION 20.10.0
+ENV PATH $NVM_DIR/versions/node/v$NODE_VERSION/bin:$PATH
+
+RUN yum update -y && \
+    yum install -y tar xz git && \
+    yum groupinstall -y "Development Tools"
+
+RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.1/install.sh | bash
+RUN . "$NVM_DIR/nvm.sh" && nvm install $NODE_VERSION && nvm use $NODE_VERSION && nvm alias default $NODE_VERSION
+RUN npm install -g typescript
+
+WORKDIR /app
+COPY package*.json ./
+RUN npm install
+COPY . .
+
+RUN tsc
+# EXPOSE 3000
+CMD ["node", "dist/app.js"]
