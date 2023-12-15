@@ -2,7 +2,7 @@
   "compilerOptions": {
     "target": "es2020", // ECMAScript 2020をターゲットにします
     "module": "commonjs", // Node.jsスタイルのモジュールを使用します
-    "lib": ["es2020"], // ECMAScript 2020のライブラリを含めます
+    "lib": ["es2020", "dom"], // ECMAScript 2020のライブラリを含めます
     "outDir": "./dist", // コンパイルされたファイルを dist ディレクトリに出力します
     "strict": true, // 厳格な型チェックを有効にします
     "esModuleInterop": true, // ESモジュールとの相互運用性を有効にします
@@ -10,6 +10,7 @@
     "types": ["node"],
     "noImplicitAny": true,
     "paths": {
+      "@server/*": ["./src/*"],
       "@common/*": ["../talkn-common/src/*"]
     }
   },
