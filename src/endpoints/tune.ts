@@ -1,23 +1,27 @@
-import Sequence from "@common/Sequence";
-import ChModel from "@common/models/Ch";
-import { Setting } from "@server/common/models/Setting";
 import { Socket } from "socket.io";
+import Sequence from "@common/Sequence";
+import ChModel, { Ch } from "@common/models/Ch";
+import { Setting } from "@server/common/models/Setting";
 
-export type RequestState = {
+export type Request = {};
+
+export type Response = {};
+
+export default (socket: Socket, request: Request, setting: Setting) => {
+  const { handshake } = socket;
+  const host = String(handshake.headers.host);
+  const connection = String(handshake.query.connection);
+  const chParams = getChParams({ host, connection });
+  console.log("tune", connection, chParams);
+  socket.emit(connection, { tuneCh: chParams, type: "tune" });
+};
+
+type GetChPropsParams = {
   host: string;
   connection: string;
 };
 
-export default (
-  ioUser: Socket,
-  requestState: RequestState,
-  setting: Setting
-) => {
-  const chProps = getChPropsFromRequest(requestState);
-  console.log(chProps);
-};
-
-export const getChPropsFromRequest = (requestState: RequestState) => {
+export const getChParams = (params: GetChPropsParams): Partial<Ch> => {
   const getConnection = (connection: string) => {
     if (connection === "") return ChModel.rootConnection;
     return connection.endsWith(ChModel.rootConnection)
@@ -51,7 +55,7 @@ export const getChPropsFromRequest = (requestState: RequestState) => {
       : ChModel.plainType;
   };
 
-  const { connection: _connection, host } = requestState;
+  const { connection: _connection, host } = params;
   const connection = getConnection(_connection);
   const connections = getConnections(connection);
   const favicon = getFavicon(host);
