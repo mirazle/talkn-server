@@ -14,6 +14,7 @@ export default (socket: Socket, request: Request, setting: Setting) => {
   const chParams = getChParams({ host, connection });
   console.log("tune", connection, chParams);
   socket.emit(connection, { tuneCh: chParams, type: "tune" });
+  // socket.broadcast.emit(connection, { tuneCh: chParams, type: "tune" });
 };
 
 type GetChPropsParams = {

@@ -1,11 +1,10 @@
 {
   "restartable": "rs",
   "env": {
-    "NODE_V8_COVERAGE": "./logs/",
     "NODE_ENV": "development"
   },
-  "watch": ["./dist/src"],
-  "ext": "js",
+  "watch": ["./src/*", "../talkn-common/src/*"],
+  "ext": "ts",
   "ignore": ["tests/**/*.js"],
-  "exec": "node -r ts-node/register -r tsconfig-paths/register --prof ./dist/run.js"
+  "exec": "ts-node -r tsconfig-paths/register ./src/run.ts"
 }

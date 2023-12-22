@@ -3,8 +3,8 @@
     {
       "name": "talkn-server",
       "script": "./src/run.ts",
-      "out_file": "log/app.log",
-      "error_file": "log/error.log",
+      "out_file": "logs/app.log",
+      "error_file": "logs/error.log",
       "log_date_format": "YYYY-MM-DD HH:mm Z",
       "combine_logs": true,
       "merge_logs": true,
@@ -21,8 +21,8 @@
     }
   ],
   "log_date_format": "YYYY-MM-DD HH:mm Z",
-  "error_file": "log/error.log",
-  "out_file": "log/out.log",
+  "error_file": "logs/error.log",
+  "out_file": "logs/out.log",
   "combine_logs": true,
   "merge_logs": true,
   "log_type": "json"
