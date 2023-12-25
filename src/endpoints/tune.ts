@@ -10,9 +10,11 @@ export type Response = {};
 export default (socket: Socket, request: Request, setting: Setting) => {
   const { handshake } = socket;
   const host = String(handshake.headers.host);
+  const pid = String(handshake.query.pid);
   const connection = String(handshake.query.connection);
   const chParams = getChParams({ host, connection });
-  console.log("tune", connection, chParams);
+  console.log("tune!", socket.nsp.name, connection);
+  socket.emit(pid, { tuneCh: chParams, type: "tune" });
   socket.emit(connection, { tuneCh: chParams, type: "tune" });
   // socket.broadcast.emit(connection, { tuneCh: chParams, type: "tune" });
 };
