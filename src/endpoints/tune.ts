@@ -2,71 +2,81 @@ import { Socket } from "socket.io";
 import Sequence from "@common/Sequence";
 import ChModel, { Ch } from "@common/models/Ch";
 import { Setting } from "@server/common/models/Setting";
+import TalknIo from "@server/listen";
 
 export type Request = {};
 
 export type Response = {};
 
-export default (socket: Socket, request: Request, setting: Setting) => {
-  const { handshake } = socket;
-  const host = String(handshake.headers.host);
-  const pid = String(handshake.query.pid);
-  const connection = String(handshake.query.connection);
-  const chParams = getChParams({ host, connection });
-  console.log("tune!", socket.nsp.name, connection);
-  socket.emit(pid, { tuneCh: chParams, type: "tune" });
-  socket.emit(connection, { tuneCh: chParams, type: "tune" });
-  // socket.broadcast.emit(connection, { tuneCh: chParams, type: "tune" });
-};
+export default (
+  talknIo: TalknIo,
+  socket: Socket,
+  request: Request,
+  setting: Setting
+) => {
+  const {
+    handshake: { headers, query },
+  } = socket;
 
-type GetChPropsParams = {
-  host: string;
-  connection: string;
-};
+  const host = String(headers.host);
+  const tuneId = String(query.tuneId);
+  const connection = String(query.connection);
+  socket.join(connection);
 
-export const getChParams = (params: GetChPropsParams): Partial<Ch> => {
-  const getConnection = (connection: string) => {
-    if (connection === "") return ChModel.rootConnection;
-    return connection.endsWith(ChModel.rootConnection)
-      ? connection
-      : `${connection}${ChModel.rootConnection}`;
-  };
-  const getFavicon = (host: string) => {
-    return host.endsWith(ChModel.rootConnection)
-      ? `${host}favicon.ico`
-      : `${host}${ChModel.rootConnection}favicon.ico`;
-  };
-  const getConnections = (connection: string) => {
-    let connections = [ChModel.rootConnection];
-    if (connection !== ChModel.rootConnection) {
-      const connectionArr = connection
-        .split(ChModel.connectionSeparator)
-        .filter((part) => part !== "");
-      let connectionPart = "";
-      for (const part of connectionArr) {
-        connectionPart += ChModel.rootConnection + part;
-        connections.push(connectionPart);
-      }
-    }
-    return connections;
-  };
-
-  const getType = (host: string) => {
-    return host.startsWith(Sequence.HTTPS_PROTOCOL) ||
-      host.startsWith(Sequence.HTTP_PROTOCOL)
-      ? ChModel.defultType
-      : ChModel.plainType;
-  };
-
-  const { connection: _connection, host } = params;
-  const connection = getConnection(_connection);
-  const connections = getConnections(connection);
-  const favicon = getFavicon(host);
-  const type = getType(host);
-  return {
+  const rootChUserCnt = talknIo.getRootChUsers();
+  const childChUsers = talknIo.getChildChUsers(connection);
+  const childChUserCnt = childChUsers ? childChUsers.size : 0;
+  const chParams = ChModel.getChParams({
+    host,
     connection,
-    connections,
-    favicon,
-    type,
-  };
+    liveCnt: rootChUserCnt,
+  });
+
+  chParams.connections!.forEach((connection) => socket.join(connection));
+  console.log("tune!", rootChUserCnt, childChUserCnt, connection);
+  // talknIo.emit(socket, tuneId, { tuneCh: chParams, type: "tune" });
+  talknIo.broadcast(connection, { tuneCh: chParams, type: "tune" });
+  // socket.emit(connection, { tuneCh: chParams, type: "tune" });
+
+  // socket.broadcast.emit(connection, { tuneCh: chParams, type: "tune" });
+  /*
+    OK  ブラウザ複数立ち上げて、emitとbroardcastを確立させる。
+    OK  フロントで検証 親子liveCnt解決
+        Nodeサーバーを複数立ち上げて、publishとsubscribeを確認する
+
+    /を登録chとする
+      isRootChはtrue
+        subscribe('/')
+      connectionは/
+        emitは自分にのみ
+        broadcast(tune, untuneの更新)はrootRedisにpublishをかます。
+      connectionは/aa
+        emitは自分にのみ
+        broadcast(tune, untuneの更新)はrootRedisにpublishをかます。
+
+    /aa.comを登録chとする
+
+
+    /aa.com/
+    /aa.com/a/
+    /aa.com/a/aa/
+    /aa.com/a/aa/aaaa/
+      rooms(['/aa.com/', '/aa.com/a/', '/aa.com/a/aa/','/aa.com/a/aa/aaaa/'])
+
+      親子liveCnt解決
+      tune
+      untune
+      fetchRank
+
+    (isTopCh: true)
+
+        (isTopCh: false)
+          connectionは/aa.com
+            emitは自分にのみ
+            broadcast(tune, untuneの更新)はrootRedisにpublishをかます。
+          connectionは/aa.com/aaa
+            emitは自分にのみ
+            broadcast(tune, untuneの更新)はrootRedisにpublishをかます。
+
+  */
 };
