@@ -26,6 +26,21 @@ redis-server --port 6379 &
 redis-server --port 6380 &
 ```
 
+# Nginx(Proxy サーバー)
+
+```
+brew install nginx
+nginx -v
+nginx -c $(pwd)/nginx/nginx.conf
+nginx -s reload
+lsof -i :10443
+kill -9 $(lsof -t -i:10443)
+curl https://localhost:10443
+```
+
 ## Node
 
-`npm run dev`
+```
+TOP_CONNECTION=/ npm run dev
+TOP_CONNECTION=/aa.com/ npm run dev
+```

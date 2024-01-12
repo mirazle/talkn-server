@@ -16,13 +16,13 @@ const chRedisPort = conf.redis.ch.port;
 
 class TalknIo {
   static namespace: string = '/';
-  connection: string;
+  topConnection: string;
   server: Server;
   rootPubRedis: RedisClientType;
   rootSubRedis: RedisClientType;
   db: any;
-  constructor(connection = Ch.rootConnection, ioPort = io.root.port) {
-    this.connection = connection;
+  constructor(topConnection = Ch.rootConnection, ioPort = io.root.port) {
+    this.topConnection = topConnection;
     httpsServer.listen(ioPort);
     this.server = new Server(httpsServer, serverOption);
 
@@ -42,7 +42,7 @@ class TalknIo {
   }
 
   get isRoot() {
-    return this.connection === Ch.rootConnection;
+    return this.topConnection === Ch.rootConnection;
   }
 
   public getRootChUsers() {

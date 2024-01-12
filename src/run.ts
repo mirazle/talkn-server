@@ -9,15 +9,15 @@ import { getOpenPort } from '@server/listen';
 import conf from '@server/conf';
 
 const { io } = conf;
-const connection = process.env.TOP_CONNECTION ? process.env.TOP_CONNECTION : Ch.rootConnection;
+const topConnection = process.env.TOP_CONNECTION ? Ch.getConnection(process.env.TOP_CONNECTION) : Ch.rootConnection;
 const ioRootPort = io.root.port;
 
 const run = async () => {
-  const ioPort = connection === Ch.rootConnection ? ioRootPort : await getOpenPort(ioRootPort + 1);
-  const talknIo = new TalknIo(connection, ioPort);
+  const ioPort = topConnection === Ch.rootConnection ? ioRootPort : await getOpenPort(ioRootPort + 1);
+  const talknIo = new TalknIo(topConnection, ioPort);
   const setting: Setting = settingInit; // TODO connect postgresql
 
-  console.log('@@@@@', ioPort, 'connection', connection);
+  console.log('@@@@@', ioPort, 'TOP_CONNECTION', topConnection);
 
   const connectioned = (socket: Socket) => {
     if (socket.connected) {

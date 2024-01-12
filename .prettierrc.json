@@ -1,0 +1,9 @@
+{
+  "printWidth": 140,
+  "tabWidth": 2,
+  "singleQuote": true,
+  "quoteProps": "consistent",
+  "jsxBracketSameLine": true,
+  "importOrder": ["^@common/", "@redux/"],
+  "importOrderSeparation": true
+}
