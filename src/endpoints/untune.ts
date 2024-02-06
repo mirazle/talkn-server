@@ -1,27 +1,31 @@
 import { Socket } from 'socket.io';
 import ChModel from '@common/models/Ch';
-import { Setting } from '@server/common/models/Setting';
-import TalknIo from '@server/listen';
+import { Contract } from '@common/models/Contract';
+import TalknIo from '@server/listens/io';
 
 export type Request = {};
 
 export type Response = {};
 
-export default (talknIo: TalknIo, socket: Socket, request: Request, setting: Setting) => {
+export default async (talknIo: TalknIo, socket: Socket, contract?: Contract, request?: Request) => {
+  const { redisClients } = talknIo.listend;
   const { query } = socket.handshake;
   const { headers } = socket.request;
   const host = String(headers.host);
   const url = String(socket.request.url);
   const tuneId = String(query.tuneId);
   const connection = ChModel.getConnectionFromRequest(host, url);
-  console.log('@', connection, talknIo.topConnection);
+
   if (connection.startsWith(talknIo.topConnection)) {
+    const parentConnection = ChModel.getParentConnection(connection);
     socket.leave(connection);
 
     const chUserCnt = talknIo.server.engine.clientsCount;
     const childChUsers = talknIo.getChildChUsers(connection);
     const childChUserCnt = childChUsers ? childChUsers.size : 0;
-    const chParams = ChModel.getChParams({ tuneId, host, connection, liveCnt: chUserCnt });
+    const chParams = ChModel.getChParams({ tuneId, host, connection, liveCnt: childChUserCnt });
+
+    redisClients.liveCntRedis.zAdd(parentConnection, { value: connection, score: childChUserCnt });
 
     console.log('untune!', chUserCnt, childChUserCnt, connection);
     talknIo.broadcast(connection, { tuneCh: chParams, type: 'untune' });

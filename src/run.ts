@@ -1,42 +1,50 @@
 import { Socket } from 'socket.io';
+import fs from 'fs';
 
-import { Setting, init as settingInit } from '@common/models/Setting';
 import { isValidKey } from '@common/utils';
 import Ch from '@common/models/Ch';
-import TalknIo from '@server/listen';
+import { Contract } from '@common/models/Contract';
+import TalknIo from '@server/listens/io';
 import endpoints from '@server/endpoints';
-import { getOpenPort } from '@server/listen';
+
 import conf from '@server/conf';
+import listens from '@server/listens';
 
 const { io } = conf;
 const topConnection = process.env.TOP_CONNECTION ? Ch.getConnection(process.env.TOP_CONNECTION) : Ch.rootConnection;
-const ioRootPort = io.root.port;
+const isRootConnection = topConnection === Ch.rootConnection;
 
-const run = async () => {
-  const ioPort = topConnection === Ch.rootConnection ? ioRootPort : await getOpenPort(ioRootPort + 1);
-  const talknIo = new TalknIo(topConnection, ioPort);
-  const setting: Setting = settingInit; // TODO connect postgresql
+fs.readFile('contracts.json', 'utf8', async (err, json) => {
+  if (err) console.error(err);
 
-  console.log('@@@@@', ioPort, 'TOP_CONNECTION', topConnection);
+  try {
+    const contracts = JSON.parse(json) as Contract[];
+    const contract = contracts.find((contract) => contract.nginx.location === topConnection);
+    const ioPort = !isRootConnection && Boolean(contract) ? Number(contract?.nginx.proxyWssPort) : Number(io.root.port);
 
-  const connectioned = (socket: Socket) => {
-    if (socket.connected) {
-      attachEndpoints(socket, setting);
-      endpoints.tune(talknIo, socket, {}, setting);
-    }
-  };
+    const listend = await listens(ioPort, contract);
+    const talknIo = new TalknIo(topConnection, listend);
 
-  const attachEndpoints = (socket: Socket, setting: Setting) => {
-    Object.keys(endpoints).forEach((endpoint) => {
-      socket.on(endpoint, (requestState: any) => {
-        if (isValidKey(endpoint, endpoints)) {
-          endpoints[endpoint](talknIo, socket, requestState, setting);
-        }
+    const connectioned = (socket: Socket) => {
+      if (socket.connected) {
+        attachEndpoints(socket);
+        const requestState = {};
+        endpoints.tune(talknIo, socket, contract, requestState);
+      }
+    };
+
+    const attachEndpoints = (socket: Socket) => {
+      Object.keys(endpoints).forEach((endpoint) => {
+        socket.on(endpoint, (requestState: any) => {
+          if (isValidKey(endpoint, endpoints)) {
+            endpoints[endpoint](talknIo, socket, contract, requestState);
+          }
+        });
       });
-    });
-  };
+    };
 
-  talknIo.server.of(TalknIo.namespace).on('connection', connectioned);
-};
-
-run();
+    talknIo.server.of(TalknIo.namespace).on('connection', connectioned);
+  } catch (error) {
+    console.error(error);
+  }
+});

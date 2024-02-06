@@ -1,3 +1,15 @@
+#!/bin/sh
+
+# JSONファイルのパス
+INPUT_JSON_FILE="contracts.json"
+
+SOCKET_IO_PATH="/socket.io"
+
+# nginx.confファイルへの出力パス
+NGINX_CONF="nginx/nginx.conf"
+
+{
+cat << 'EOF'
 # user  staff;
 worker_processes  1;
 
@@ -27,17 +39,22 @@ http {
     proxy_set_header Access-Control-Allow-Headers "DNT, X-Mx-ReqToken, Keep-Alive, User-Agent, X-Requested-With, If-Modified-Since, Cache-Control, Content-Type";
     proxy_set_header Access-Control-Allow-Credentials true; 
 
-    location /aa.com/ {
-      proxy_pass https://127.0.0.1:10445/socket.io/aa.com/;
-    }
-    location /bb.com/ {
-      proxy_pass https://127.0.0.1:10446/socket.io/bb.com/;
-    }
-    location /cc.com/ {
-      proxy_pass https://127.0.0.1:10447/socket.io/cc.com/;
-    }
+EOF
+
+# JSONから設定を読み込み、locationブロックを生成
+jq -r --arg socket_io_path "$SOCKET_IO_PATH" '.[] | "    location \(.nginx.location) {\n      proxy_pass https://\(.nginx.proxyWssServer):\(.nginx.proxyWssPort)\($socket_io_path)\(.nginx.location);\n    }"' $INPUT_JSON_FILE
+
+
+cat << 'EOF'
     location / {
       proxy_pass https://127.0.0.1:10444/socket.io/;
     }
   }
 }
+EOF
+} > $NGINX_CONF
+
+openresty -s stop
+openresty -c $(pwd)/nginx/nginx.conf
+
+echo "nginx.conf has been generated & boot."

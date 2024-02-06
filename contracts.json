@@ -1,0 +1,5 @@
+[
+  { "nginx": { "location": "/aa.com/", "proxyWssServer": "127.0.0.1", "proxyWssPort": 10445 }, "redis": { "port": 6380 } },
+  { "nginx": { "location": "/bb.com/", "proxyWssServer": "127.0.0.1", "proxyWssPort": 10446 }, "redis": { "port": 6381 } },
+  { "nginx": { "location": "/cc.com/", "proxyWssServer": "127.0.0.1", "proxyWssPort": 10447 }, "redis": { "port": 6382 } }
+]

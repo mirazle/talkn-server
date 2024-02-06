@@ -1,30 +1,27 @@
-import { Setting } from "@server/common/models/Setting";
-import TalknIo from "@server/listen";
-import { Socket } from "socket.io";
+import { Socket } from 'socket.io';
+
+import ChModel from '@common/models/Ch';
+import { Contract } from '@common/models/Contract';
+import TalknIo from '@server/listens/io';
 
 export type Request = {};
 
 export type Response = {};
 
-export default (
-  talknIo: TalknIo,
-  socket: Socket,
-  request: Request,
-  setting: Setting
-) => {
-  console.log("fetchRanks", request);
-  /*
-  const namespace = io.of('/your-namespace'); // あるいは io.of('/') など
-const roomsInfo = [];
+export default async (talknIo: TalknIo, socket: Socket, contract?: Contract, request?: Request) => {
+  const { redisClients } = talknIo.listend;
+  const { query } = socket.handshake;
+  const { headers } = socket.request;
+  const host = String(headers.host);
+  const url = String(socket.request.url);
+  const tuneId = String(query.tuneId);
+  const connection = ChModel.getConnectionFromRequest(host, url);
 
-namespace.adapter.rooms.forEach((value, key) => {
-    // key はルーム名、value は Set オブジェクトで、接続しているソケットの ID が含まれる
-    roomsInfo.push({ room: key, count: value.size });
-});
+  if (connection.startsWith(talknIo.topConnection)) {
+    const parentConnection = ChModel.getParentConnection(connection);
 
-// 接続数が多い順にルームをソート
-roomsInfo.sort((a, b) => b.count - a.count);
-
-console.log(roomsInfo); // ソートされたルームの情報
-*/
+    const liveRank = await redisClients.liveCntRedis.zRangeWithScores(parentConnection, 0, -1, { REV: true });
+    console.log('fetchRanks', liveRank);
+    // socket.broadcast.emit(connection, { ranks: chParams, type: "fetchRanks" });
+  }
 };
