@@ -20,6 +20,7 @@ const conf = {
     ch: { host: 'localhost', port: 10445 },
   },
   redis: {
+    limit: 20,
     root: { host: 'localhost', port: 6379 },
     ch: { host: 'localhost', port: 6380 },
   },

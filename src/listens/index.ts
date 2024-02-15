@@ -11,10 +11,12 @@ export type ListensReturn = {
   redisClients: RedisClients;
 };
 
-const listens = async (ioPort: number, contract?: Contract): Promise<ListensReturn> => {
+const listens = async (topConnection: string, ioPort: number, contract?: Contract): Promise<ListensReturn> => {
   const setting: Setting = settingInit;
-  const httpsServer = await getHttpsServer(ioPort);
-  const redisClients = await getRedisClients(contract);
+  const httpsServer = await getHttpsServer(topConnection, ioPort);
+  const redisClients = await getRedisClients(topConnection, contract);
+
+  redisClients.subRedis.subscribe;
   return { setting, httpsServer, redisClients };
 };
 

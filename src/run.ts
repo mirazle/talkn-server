@@ -22,8 +22,8 @@ fs.readFile('contracts.json', 'utf8', async (err, json) => {
     const contract = contracts.find((contract) => contract.nginx.location === topConnection);
     const ioPort = !isRootConnection && Boolean(contract) ? Number(contract?.nginx.proxyWssPort) : Number(io.root.port);
 
-    const listend = await listens(ioPort, contract);
-    const talknIo = new TalknIo(topConnection, listend);
+    const listend = await listens(topConnection, ioPort, contract);
+    const talknIo = new TalknIo(topConnection, listend, contracts);
 
     const connectioned = (socket: Socket) => {
       if (socket.connected) {

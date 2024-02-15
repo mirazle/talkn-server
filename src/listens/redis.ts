@@ -4,6 +4,7 @@ import { Cluster } from 'ioredis';
 
 import conf from '@server/conf';
 import { Contract } from '@common/models/Contract';
+import ChModel from '@common/models/Ch';
 
 const { redis } = conf;
 
@@ -44,7 +45,27 @@ export type RedisClients = {
   liveCntRedis: RedisClientType;
 };
 
-export const getRedisClients = async (contract?: Contract): Promise<RedisClients> => {
+export const deleteAllSortSets = async (redisClient: RedisClientType, pattern: string): Promise<void> => {
+  let cursor = 0;
+  do {
+    // SCAN コマンドを使用してキーを検索
+    const reply = await redisClient.scan(cursor, {
+      MATCH: pattern,
+      //COUNT: 10000,
+    });
+
+    cursor = reply.cursor;
+    const keys = reply.keys;
+    console.log(keys);
+    // 取得したキーごとに削除操作を実行
+    for (const key of keys) {
+      await redisClient.del(key);
+      console.log(`Deleted key: ${key}`);
+    }
+  } while (cursor !== 0); // カーソルが '0' に戻るまで続ける
+};
+
+export const getRedisClients = async (topConnection: string, contract?: Contract): Promise<RedisClients> => {
   // pub sub
   await startRedisServerProccess(redis.root.port);
   const pubRedis: RedisClientType = createClient({ url: `redis://${TalknRedis.host}:${redis.root.port}` });
@@ -70,6 +91,7 @@ export const getRedisClients = async (contract?: Contract): Promise<RedisClients
   const promiseLiveCnt = new Promise((resolve, reject) => {
     liveCntRedis.connect();
     liveCntRedis.on('connect', resolve);
+    deleteAllSortSets(liveCntRedis, '*');
   });
 
   await Promise.all([promisePub, promiseSub, promiseLiveCnt]);

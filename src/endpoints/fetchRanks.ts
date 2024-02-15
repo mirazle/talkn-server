@@ -20,8 +20,8 @@ export default async (talknIo: TalknIo, socket: Socket, contract?: Contract, req
   if (connection.startsWith(talknIo.topConnection)) {
     const parentConnection = ChModel.getParentConnection(connection);
 
-    const liveRank = await redisClients.liveCntRedis.zRangeWithScores(parentConnection, 0, -1, { REV: true });
-    console.log('fetchRanks', liveRank);
+    //    const liveRank = await redisClients.liveCntRedis.zRangeWithScores(parentConnection, 0, -1, { REV: true });
+    // console.log('fetchRanks', liveRank);
     // socket.broadcast.emit(connection, { ranks: chParams, type: "fetchRanks" });
   }
 };
