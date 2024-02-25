@@ -3,15 +3,37 @@ import { createAdapter } from '@socket.io/redis-adapter';
 
 import { Contract } from '@common/models/Contract';
 import ChModel, { Connection, ParentConnection } from '@common/models/Ch';
-import { tuneOptionRank } from '@common/models/TuneOption';
+import {
+  tuneOptionRankHasPost,
+  tuneOptionDetailEmotion,
+  tuneOptionPosts,
+  tuneOptionRank,
+  tuneOptionRankAll,
+} from '@common/models/TuneOption';
+import { LightRank, LightRankModel, RangeWithScore } from '@common/models/Rank';
+
 import { Responses } from '@server/endpoints';
+import logics from '@server/endpoints/logics';
+import { Response } from '@server/endpoints/tune';
 import conf from '@server/conf';
-import RankModel from '@server/common/models/Rank';
 
 import { ListensReturn } from '.';
+import { isValidKey } from '@common/utils';
 
 const { serverOption, redis } = conf;
 const { limit } = redis;
+
+export const connectionTypeRoot = 'ROOT';
+export const connectionTypeContractTop = 'CONTRACT_TOP';
+export const connectionTypeContract = 'CONTRACT';
+export const connectionTypeUnContractTop = 'UNCONTRACT_TOP';
+export const connectionTypeUnContract = 'UNCONTRACT';
+export type ConnectionType =
+  | typeof connectionTypeRoot
+  | typeof connectionTypeContractTop
+  | typeof connectionTypeContract
+  | typeof connectionTypeUnContractTop
+  | typeof connectionTypeUnContract;
 
 // io、redisインスタンスを跨ぐ処理を定義
 class TalknIo {
@@ -20,13 +42,8 @@ class TalknIo {
   server: Server;
   listend: ListensReturn;
   contracts: Contract[];
-  public get isRootConnection(): boolean {
+  get isRootServer() {
     return this.topConnection === ChModel.rootConnection;
-  }
-
-  public get isContractConnection(): boolean {
-    const { topConnection, contracts } = this;
-    return Boolean(contracts.find((contract) => contract.nginx.location === topConnection));
   }
   constructor(topConnection: string, listend: ListensReturn, contracts: Contract[]) {
     this.topConnection = topConnection;
@@ -34,15 +51,27 @@ class TalknIo {
     this.contracts = contracts;
     this.server = new Server(listend.httpsServer, serverOption);
     this.server.adapter(createAdapter(listend.redisClients.pubRedis, listend.redisClients.subRedis));
+    this.getConnectionType = this.getConnectionType.bind(this);
 
-    this.onSubscribeToBroacast();
+    this.handleOnRootSubscribe();
   }
+  public getConnectionType(connection: Connection = ChModel.rootConnection): ConnectionType {
+    const { isRootServer, topConnection, contracts } = this;
+    if (isRootServer && topConnection === connection) return connectionTypeRoot;
 
-  public getTopConnectionUserCnt() {
+    const isContract = Boolean(contracts.find((contract) => contract.nginx.location === topConnection));
+    if (isContract) {
+      return topConnection === connection ? connectionTypeContractTop : connectionTypeContract;
+    } else {
+      return connection.split(ChModel.rootConnection).length === 3 ? connectionTypeUnContractTop : connectionTypeUnContract;
+    }
+  }
+  public getTopConnectionUserCnt(): number {
     return this.server.engine.clientsCount;
   }
 
-  public getLiveCnt(connection: string) {
+  public getLiveCnt(socket: Socket, connection: string, isIncrement = true): number {
+    isIncrement ? socket.join(connection) : socket.leave(connection);
     const connectionRoomUsers = this.server.of(TalknIo.namespace).adapter.rooms.get(connection);
     return connectionRoomUsers ? connectionRoomUsers.size : 0;
   }
@@ -51,90 +80,95 @@ class TalknIo {
     this.server.on(connection, callback);
   }
 
-  public async updateRank(
-    parentConnection: ParentConnection,
-    connection: Connection,
-    liveCnt: number
-  ): Promise<{ isUpdate: boolean; newLiveCnt: number }> {
-    const { liveCntRedis } = this.listend.redisClients;
-    if (parentConnection) {
-      let newLiveCnt = 0;
-      if (liveCnt === 0) {
-        newLiveCnt = await liveCntRedis.zRem(parentConnection, connection);
+  public async getChScores(parentConnection: ParentConnection): Promise<RangeWithScore[]> {
+    return new Promise(async (resolve) => {
+      if (parentConnection) {
+        const { liveCntRedis } = this.listend.redisClients;
+        const rangeWithScores = await liveCntRedis.zRangeWithScores(parentConnection, 0, limit, { REV: true });
+        resolve(rangeWithScores);
       } else {
-        newLiveCnt = await liveCntRedis.zAdd(parentConnection, { value: connection, score: liveCnt });
+        resolve([{ score: 0, value: '' }]);
       }
-      return { isUpdate: true, newLiveCnt };
-    }
-    return { isUpdate: false, newLiveCnt: 0 };
+    });
   }
 
-  public async publish(parentConnection: ParentConnection, connection: Connection, connectionUserCnt: number) {
-    const { isContractConnection } = this;
-    const { liveCntRedis, pubRedis } = this.listend.redisClients;
-
-    if (parentConnection) {
-      let newScore = 0;
-      if (connectionUserCnt === 0) {
-        newScore = await liveCntRedis.zRem(parentConnection, connection);
-      } else {
-        newScore = await liveCntRedis.zAdd(parentConnection, { value: connection, score: connectionUserCnt });
+  public async putChRank(parentConnection: ParentConnection, connection: Connection, liveCnt: number) {
+    const { listend, getConnectionType } = this;
+    const { liveCntRedis } = listend.redisClients;
+    const connectionType = getConnectionType(connection);
+    const put = async () => {
+      if (parentConnection) {
+        if (liveCnt === 0) {
+          await liveCntRedis.zRem(parentConnection, connection);
+        } else {
+          await liveCntRedis.zAdd(parentConnection, { value: connection, score: liveCnt });
+        }
       }
+    };
 
-      if (isContractConnection && parentConnection === ChModel.rootConnection) {
-        console.log('@@@@@@@@@ REDIS PUB', connection, connectionUserCnt);
-        pubRedis.publish(connection, String(connectionUserCnt));
-      }
+    switch (connectionType) {
+      case connectionTypeRoot:
+        return false;
+      case connectionTypeContractTop:
+        // subscribeした後にput(更新)する
+        this.publishToRoot(liveCnt);
+        put();
+        return true;
+      case connectionTypeUnContractTop:
+        put();
+        return true;
+      case connectionTypeContract:
+      case connectionTypeUnContract:
+        put();
+        return true;
     }
   }
 
-  private onSubscribeToBroacast() {
-    const { isRootConnection, contracts, listend } = this;
-    if (isRootConnection) {
-      const { subRedis, liveCntRedis } = listend.redisClients;
+  private async handleOnRootSubscribe() {
+    const { isRootServer, contracts, listend } = this;
+    if (isRootServer) {
+      const { subRedis } = listend.redisClients;
       contracts.forEach((contract: Contract) => {
-        const connection = ChModel.getConnection(contract.nginx.location);
-        subRedis.subscribe(connection, async (score: string) => {
-          console.log('REDIS SUB', connection, score);
-          let newScore = Number(score);
-          if (newScore === 0) {
-            newScore = await liveCntRedis.zRem(ChModel.rootConnection, connection);
-          } else {
-            newScore = await liveCntRedis.zAdd(ChModel.rootConnection, { value: connection, score: newScore });
-          }
-
-          const parentScores = await liveCntRedis.zRangeWithScores(ChModel.rootConnection, 0, 20, { REV: true });
-          if (parentScores.length > 0) {
-            const parentRank = RankModel.getLightRank(parentScores);
-            console.log('ROOT REDIS SUB BROARDCAST', connection, score);
-            this.broadcast(`rank:${ChModel.rootConnection}`, { rank: parentRank, type: 'rank' });
-          }
-        });
+        const topConnection = ChModel.getConnection(contract.nginx.location);
+        subRedis.subscribe(topConnection, (score) => this.subscribeFromCh(topConnection, Number(score)));
       });
     }
   }
 
-  async broadcast(connection: string, response: Partial<Responses>) {
-    this.server.emit(connection, response);
+  public async publishToRoot(liveCnt: number) {
+    const { topConnection, listend } = this;
+    const { pubRedis } = listend.redisClients;
+
+    // onRootSubscribeToBroacast内のsubscribeでキャッチ
+    pubRedis.publish(topConnection, String(liveCnt));
+    console.log('@@@@@@@@@ REDIS PUB(CH)', topConnection, liveCnt);
   }
 
-  async broadcastRank(parentConnection: ParentConnection, connection: Connection) {
-    const { liveCntRedis } = this.listend.redisClients;
+  public async subscribeFromCh(topConnection: Connection, liveCnt: number) {
+    await this.putChRank(ChModel.rootConnection, topConnection, liveCnt);
+    const rootScores = await this.getChScores(ChModel.rootConnection);
 
-    if (parentConnection) {
-      const parentScores = await liveCntRedis.zRangeWithScores(parentConnection, 0, limit, { REV: true });
-      if (parentScores.length > 0) {
-        const parentRank = RankModel.getLightRank(parentScores);
-        this.broadcast(`${tuneOptionRank}:${parentConnection}`, { rank: parentRank, type: 'rank' });
-      }
+    if (rootScores.length > 0) {
+      const parentRank = rootScores.map((score) => new LightRankModel(score));
+      console.log('ROOT REDIS SUB BROARDCAST', topConnection, parentRank, liveCnt);
+      this.broadcast('rank', `${tuneOptionRank}:${ChModel.rootConnection}`, { rank: parentRank });
     }
+  }
 
-    const scores = await liveCntRedis.zRangeWithScores(connection, 0, limit, { REV: true });
+  async broadcast(type: string, connection: ParentConnection | Connection, response: Partial<Responses>) {
+    if (connection) {
+      console.log('@@@@@@@@@ BROARDCAST', type, connection, { ...response, type });
+      this.server.emit(connection, { ...response, type });
+    }
+  }
+
+  async getChRank(connection: ParentConnection | Connection): Promise<LightRank[]> {
+    let rank: LightRank[] = [];
+    const scores = await this.getChScores(connection);
     if (scores.length > 0) {
-      const rank = RankModel.getLightRank(scores);
-      console.log('CH REDIS SUB BROARDCAST', connection);
-      this.broadcast(`${tuneOptionRank}:${connection}`, { rank, type: 'rank' });
+      rank = scores.map((score) => new LightRankModel(score) as LightRank);
     }
+    return rank;
   }
 
   async emit(socket: Socket, connection: string, response: Partial<Responses>) {

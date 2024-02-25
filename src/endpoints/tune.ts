@@ -1,17 +1,26 @@
 import { Socket } from 'socket.io';
 import ChModel from '@common/models/Ch';
 import { Contract } from '@common/models/Contract';
-import { TuneOption, liveMethodList } from '@common/models/TuneOption';
+import { tuneOptionRank } from '@common/models/TuneOption';
+import logics from '@server/endpoints/logics';
 import TalknIo from '@server/listens/io';
-import logics from './logics';
+import { Types } from '@server/common/models';
 
 export type Request = {};
 
-export type Response = {};
+export type Response = {
+  type: 'tune';
+  tuneCh: Types['Ch'];
+  rank: Types['Rank'];
+  rankAll: Types['Rank'];
+};
+/*
+  子供をtuneしてから親をtuneすると子供のrankが生成されてない、もしくは取得できない。ここを切り分ける。
 
+*/
+// ③rankAll
 export default async (talknIo: TalknIo, socket: Socket, contract?: Contract, request?: Request) => {
-  const { listend, isContractConnection, topConnection } = talknIo;
-  const { redisClients } = listend;
+  const { topConnection } = talknIo;
   const { query } = socket.handshake;
   const { headers } = socket.request;
   const host = String(headers.host);
@@ -20,23 +29,21 @@ export default async (talknIo: TalknIo, socket: Socket, contract?: Contract, req
   const connection = ChModel.getConnectionFromRequest(host, url);
 
   if (connection.startsWith(topConnection)) {
+    // fix status
     const parentConnection = ChModel.getParentConnection(connection);
-    socket.join(connection);
+    const liveCnt = talknIo.getLiveCnt(socket, connection, true);
 
-    const liveCnt = talknIo.getLiveCnt(connection);
-    talknIo.publish(parentConnection, connection, liveCnt);
+    // broardcast tune.
+    const tuneCh = ChModel.getChParams({ tuneId, host, connection, liveCnt, contract }) as Types['Ch'];
+    await talknIo.broadcast('tune', connection, { tuneCh });
 
-    console.log('@@@@@@@@ TUNE');
-    const chParams = ChModel.getChParams({ tuneId, host, connection, liveCnt, contract });
-    const { isUpdate, newLiveCnt } = await talknIo.updateRank(parentConnection, connection, liveCnt);
-    talknIo.broadcast(connection, { tuneCh: chParams, type: 'tune' });
+    // broardcast rank.
+    const { parentRank, selfRank } = await logics.tuneMethods[tuneOptionRank]!(talknIo, parentConnection, connection, { tuneCh });
+    await talknIo.broadcast('rank', parentConnection, { rank: parentRank });
+    await talknIo.broadcast('rank', connection, { rank: selfRank });
 
-    liveMethodList.forEach((key) => {
-      const methodName = key as keyof TuneOption;
-      if (logics.tuneMethods[methodName]) {
-        logics.tuneMethods[methodName]!(talknIo, parentConnection, connection);
-      }
-    });
+    // update status
+    await talknIo.putChRank(parentConnection, connection, liveCnt);
   } else {
     console.warn('BAD CONNECTION', connection, 'SERVER TOP_CONNECTION', talknIo.topConnection);
   }

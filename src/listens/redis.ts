@@ -8,6 +8,11 @@ import ChModel from '@common/models/Ch';
 
 const { redis } = conf;
 
+export type RedisScore = {
+  score: number;
+  value: string;
+};
+
 class TalknRedis {
   static get host() {
     return process.env.REDIS_HOST || '127.0.0.1';
@@ -103,17 +108,13 @@ export const startRedisServerProccess = (port: number) => {
     const redisServer = spawn('redis-server', ['--port', `${port}`]);
 
     redisServer.stdout.on('data', (data: string) => {
-      // console.log(`Redis Server: ${data}`);
       resolve(redisServer); // Redis サーバーが起動したら resolve
     });
 
     redisServer.stderr.on('data', (data: string) => {
-      // console.error(`Redis Server Error: ${data}`);
       reject(new Error(`Redis server failed to start: ${data}`)); // エラーが発生したら reject
     });
 
-    redisServer.on('close', (code: string) => {
-      // console.log(`Redis server process exited with code ${code}`);
-    });
+    redisServer.on('close', (code: string) => {});
   });
 };
