@@ -15,8 +15,10 @@ worker_processes  1;
 
 error_log  /Users/JPZ7123/talkn-server/logs/error.log;
 
+worker_rlimit_nofile 83000; # worker_connections の2~4倍以上の値を設定。OS全体で扱うことができるファイル数を超えないように注意
+
 events {
-  worker_connections  1024;
+  worker_connections 4096; # 1つのworkerプロセスが開ける最大コネクション数
 }
 
 http {

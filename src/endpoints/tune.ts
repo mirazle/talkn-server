@@ -1,10 +1,11 @@
 import { Socket } from 'socket.io';
-import ChModel from '@common/models/Ch';
+import ChModel, { Connection } from '@common/models/Ch';
 import { Contract } from '@common/models/Contract';
-import { tuneOptionRank } from '@common/models/TuneOption';
+import { tuneOptionRank, tuneOptionRankAll } from '@common/models/TuneOption';
 import logics from '@server/endpoints/logics';
 import TalknIo from '@server/listens/io';
 import { Types } from '@server/common/models';
+import { LightRank } from '@common/models/Rank';
 
 export type Request = {};
 
@@ -37,10 +38,19 @@ export default async (talknIo: TalknIo, socket: Socket, contract?: Contract, req
     const tuneCh = ChModel.getChParams({ tuneId, host, connection, liveCnt, contract }) as Types['Ch'];
     await talknIo.broadcast('tune', connection, { tuneCh });
 
+    // broardcast rankAll.
+    const rankAllList = await logics.tuneMethods[tuneOptionRankAll]!(talknIo, parentConnection, connection, { tuneCh });
+    // console.log('@@@@@@@@@@@@@ RankAllList', connection, rankAllList);
+    rankAllList.forEach((rankAllData: any, i: number) => {
+      const connection = Object.keys(rankAllData)[0];
+      const rankAll = rankAllData[connection];
+      talknIo.broadcast(tuneOptionRankAll, connection, { rankAll });
+    });
+
     // broardcast rank.
     const { parentRank, selfRank } = await logics.tuneMethods[tuneOptionRank]!(talknIo, parentConnection, connection, { tuneCh });
-    await talknIo.broadcast('rank', parentConnection, { rank: parentRank });
-    await talknIo.broadcast('rank', connection, { rank: selfRank });
+    await talknIo.broadcast(tuneOptionRank, parentConnection, { rank: parentRank });
+    await talknIo.broadcast(tuneOptionRank, connection, { rank: selfRank });
 
     // update status
     await talknIo.putChRank(parentConnection, connection, liveCnt);
