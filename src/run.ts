@@ -3,7 +3,7 @@ import fs from 'fs';
 
 import { isValidKey } from '@common/utils';
 import Ch from '@common/models/Ch';
-import { Contract } from '@common/models/Contract';
+import ChConfigModel, { ChConfigJson } from '@common/models/ChConfig';
 import TalknIo from '@server/listens/io';
 import endpoints from '@server/endpoints';
 
@@ -14,22 +14,23 @@ const { io } = conf;
 const topConnection = process.env.TOP_CONNECTION ? Ch.getConnection(process.env.TOP_CONNECTION) : Ch.rootConnection;
 const isRootConnection = topConnection === Ch.rootConnection;
 
-fs.readFile('contracts.json', 'utf8', async (err, json) => {
+fs.readFile('ch-config.json', 'utf8', async (err, json) => {
   if (err) console.error(err);
 
   try {
-    const contracts = JSON.parse(json) as Contract[];
-    const contract = contracts.find((contract) => contract.nginx.location === topConnection);
-    const ioPort = !isRootConnection && Boolean(contract) ? Number(contract?.nginx.proxyWssPort) : Number(io.root.port);
+    const chConfigJson = JSON.parse(json) as ChConfigJson;
+    const myChConfig = ChConfigModel.getMyChConfig({ chConfigJson, topConnection });
+    const myChRoots = ChConfigModel.getMyChRoots({ chConfigJson, topConnection });
 
-    const listend = await listens(topConnection, ioPort, contract);
-    const talknIo = new TalknIo(topConnection, listend, contracts);
+    const ioPort = isRootConnection ? Number(io.root.port) : Number(myChConfig?.nginx.proxyWssPort);
+    const listend = await listens(ioPort, myChConfig);
+    const talknIo = new TalknIo(topConnection, listend, myChConfig);
 
     const connectioned = (socket: Socket) => {
       if (socket.connected) {
         attachEndpoints(socket);
         const requestState = {};
-        endpoints.tune(talknIo, socket, contract, requestState);
+        endpoints.tune(talknIo, socket, myChConfig, requestState);
       }
     };
 
@@ -37,7 +38,7 @@ fs.readFile('contracts.json', 'utf8', async (err, json) => {
       Object.keys(endpoints).forEach((endpoint) => {
         socket.on(endpoint, (requestState: any) => {
           if (isValidKey(endpoint, endpoints)) {
-            endpoints[endpoint](talknIo, socket, contract, requestState);
+            endpoints[endpoint](talknIo, socket, myChConfig, requestState);
           }
         });
       });

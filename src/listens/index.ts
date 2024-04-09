@@ -1,23 +1,24 @@
+import * as Redis from 'ioredis';
 import https from 'https';
 
 import { Setting, init as settingInit } from '@common/models/Setting';
-import { Contract } from '@common/models/Contract';
+import { ChConfig } from '@common/models/ChConfig';
 import getHttpsServer from './https';
-import { RedisClients, getRedisClients } from './redis';
+import { RedisClients, getRedisClients, getRedisCluster } from './redis';
 
 export type ListensReturn = {
   setting: Setting;
   httpsServer: https.Server;
+  redisCluster: Redis.Cluster;
   redisClients: RedisClients;
 };
 
-const listens = async (topConnection: string, ioPort: number, contract?: Contract): Promise<ListensReturn> => {
+const listens = async (ioPort: number, chConfig: ChConfig): Promise<ListensReturn> => {
   const setting: Setting = settingInit;
-  const httpsServer = await getHttpsServer(topConnection, ioPort);
-  const redisClients = await getRedisClients(topConnection, contract);
-
-  redisClients.subRedis.subscribe;
-  return { setting, httpsServer, redisClients };
+  const httpsServer = await getHttpsServer(ioPort);
+  const redisClients = await getRedisClients(chConfig);
+  const redisCluster = await getRedisCluster(chConfig);
+  return { setting, httpsServer, redisClients, redisCluster };
 };
 
 export default listens;

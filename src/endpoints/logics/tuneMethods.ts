@@ -15,62 +15,52 @@ const tuneMethods: { [key in keyof TuneOption]: Function } = {
     const { getConnectionType } = talknIo;
     const selfConnectionType = getConnectionType(connection);
     const liveCnt = response.tuneCh!.liveCnt;
-    let parentRank: LightRank[] = [];
-    let selfRank: LightRank[] = [];
+    let parentBelongRank: LightRank[] = [];
+    let selfBelongRank: LightRank[] = [];
     let isExistParentRank = false;
     switch (selfConnectionType) {
       case connectionTypeRoot:
-        selfRank = await talknIo.getChRank(tuneOptionRank, ChModel.rootConnection);
+        selfBelongRank = await talknIo.getChRank(tuneOptionRank, ChModel.rootConnection);
         break;
       case connectionTypeContractTop:
       case connectionTypeUnContractTop:
       case connectionTypeContract:
       case connectionTypeUnContract:
-        parentRank = await talknIo.getChRank(tuneOptionRank, parentConnection);
-        isExistParentRank = Boolean(parentRank.find((pr) => pr.connection === connection));
+        parentBelongRank = await talknIo.getChRank(tuneOptionRank, parentConnection);
+        isExistParentRank = Boolean(parentBelongRank.find((pr) => pr.connection === connection));
         if (isExistParentRank) {
-          parentRank = parentRank.map((pr) => (pr.connection === connection ? { ...pr, liveCnt } : pr));
+          parentBelongRank = parentBelongRank.map((pr) => (pr.connection === connection ? { ...pr, liveCnt } : pr));
         } else {
-          parentRank = [...parentRank, { connection, liveCnt }];
+          parentBelongRank = [...parentBelongRank, { connection, liveCnt }];
         }
 
-        selfRank = await talknIo.getChRank(tuneOptionRank, connection);
+        // 先に生成されていたchildrenのconnectionが存在した場合のために、自身のconnectionが所有するrankChildrenを返す
+        selfBelongRank = await talknIo.getChRank(tuneOptionRank, connection);
         break;
     }
-    return { ...response, parentRank, selfRank };
+    return { ...response, parentBelongRank, selfBelongRank };
   },
   rankAll: async (talknIo: TalknIo, parentConnection: ParentConnection, connection: Connection, response: Partial<Response>) => {
-    // rankAllに今回分のtune(最新値を反映させる)
+    // 契約サーバーの場合、/にrankAllが反映されていない
     const connections = ChModel.getConnections(connection);
     const rankAllPromises: Promise<{ [key in Connection]: LightRank[] }>[] = [];
-    console.log('@@@ rankAll', connections);
     connections.forEach((keyConnection: Connection) => {
-      console.log('- ', keyConnection);
       rankAllPromises.push(
         new Promise(async (resolve) => {
-          const liveCnt = response.tuneCh!.liveCnt;
+          const tuneLiveCnt = response.tuneCh!.liveCnt;
           let chRank = await talknIo.getChRank(tuneOptionRankAll, keyConnection);
-          let isExistRank = false;
+          let isExistConnection = false;
           if (chRank.length >= 1) {
-            isExistRank = Boolean(chRank.find((cr) => cr.connection === connection));
-            console.log('A', isExistRank);
+            isExistConnection = Boolean(chRank.find((cr) => cr.connection === connection));
           }
 
-          if (isExistRank) {
-            console.log('B');
-            chRank = chRank.map((cr) => (cr.connection === connection ? { ...cr, liveCnt } : cr));
+          if (isExistConnection) {
+            chRank = chRank.map((cr) => (cr.connection === connection ? { ...cr, liveCnt: tuneLiveCnt } : cr));
           } else {
             if (keyConnection !== connection) {
-              chRank = [...chRank, { connection, liveCnt } as LightRank];
-              console.log('C');
-            } else {
-              console.log('D');
+              chRank = [...chRank, { connection, liveCnt: tuneLiveCnt } as LightRank];
             }
           }
-
-          console.log(isExistRank, chRank.length, keyConnection, connection, chRank);
-
-          //chRank = isExistRank ? chRank : [...chRank, { connection, liveCnt }];
           resolve({ [keyConnection]: chRank });
         })
       );

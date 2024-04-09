@@ -1,6 +1,6 @@
 import { Socket } from 'socket.io';
 import ChModel from '@common/models/Ch';
-import { Contract } from '@common/models/Contract';
+import { ChConfig } from '@common/models/ChConfig';
 import { tuneOptionRank } from '@common/models/TuneOption';
 
 import TalknIo from '@server/listens/io';
@@ -16,7 +16,7 @@ export type Response = {
   rankAll: Types['Rank'];
 };
 
-export default async (talknIo: TalknIo, socket: Socket, contract?: Contract, request?: Request) => {
+export default async (talknIo: TalknIo, socket: Socket, chConfig: ChConfig | null, request?: Request) => {
   const { topConnection } = talknIo;
   const { query } = socket.handshake;
   const { headers } = socket.request;
@@ -31,7 +31,7 @@ export default async (talknIo: TalknIo, socket: Socket, contract?: Contract, req
     const liveCnt = talknIo.getLiveCnt(socket, connection, false);
 
     // broardcast tune.
-    const tuneCh = ChModel.getChParams({ tuneId, host, connection, liveCnt, contract }) as Types['Ch'];
+    const tuneCh = ChModel.getChParams({ tuneId, host, connection, liveCnt, chConfig }) as Types['Ch'];
     await talknIo.broadcast('untune', connection, { tuneCh });
 
     // broardcast rank.

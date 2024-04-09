@@ -1,12 +1,17 @@
+import * as Redis from 'ioredis';
 import { exec, spawn } from 'child_process';
 import { RedisClientType, createClient } from 'redis';
-import { Cluster } from 'ioredis';
 
 import conf from '@server/conf';
-import { Contract } from '@common/models/Contract';
-import ChModel from '@common/models/Ch';
+import { ChConfig } from '@common/models/ChConfig';
+import ChModel, { Connection } from '@common/models/Ch';
 
 const { redis } = conf;
+
+export type RedisMessage = {
+  connection: Connection;
+  liveCnt: number;
+};
 
 export type RedisScore = {
   score: number;
@@ -16,9 +21,6 @@ export type RedisScore = {
 class TalknRedis {
   static get host() {
     return process.env.REDIS_HOST || '127.0.0.1';
-  }
-  static get cluster() {
-    return [{ host: TalknRedis.host, port: 6379 }];
   }
 
   static rootPubError(err: string) {
@@ -61,29 +63,40 @@ export const deleteAllSortSets = async (redisClient: RedisClientType, pattern: s
 
     cursor = reply.cursor;
     const keys = reply.keys;
-    console.log(keys);
+
     // 取得したキーごとに削除操作を実行
     for (const key of keys) {
       await redisClient.del(key);
       console.log(`Deleted key: ${key}`);
     }
-  } while (cursor !== 0); // カーソルが '0' に戻るまで続ける
+  } while (cursor !== 0);
 };
 
-export const getRedisClients = async (topConnection: string, contract?: Contract): Promise<RedisClients> => {
-  // pub sub
-  await startRedisServerProccess(redis.root.port);
-  const pubRedis: RedisClientType = createClient({ url: `redis://${TalknRedis.host}:${redis.root.port}` });
-  const subRedis: RedisClientType = pubRedis.duplicate();
-  let liveCntRedis: RedisClientType;
+export const getRedisCluster = async (chConfig: ChConfig): Promise<Redis.Cluster> => {
+  return new Promise((resolve) => {
+    console.log('REDIS CLUSTER', chConfig.redis.cluster);
+    const cluster = new Redis.Cluster(chConfig.redis.cluster);
+    cluster.on('connect', () => {
+      resolve(cluster);
+    });
+    cluster.on('reconnecting', () => {
+      console.log('Redis Reconnecting...');
+    });
 
-  // live cnt
-  if (contract) {
-    await startRedisServerProccess(contract.redis.port);
-    liveCntRedis = createClient({ url: `redis://${TalknRedis.host}:${contract.redis.port}` });
-  } else {
-    liveCntRedis = pubRedis.duplicate();
-  }
+    cluster.on('error', (error) => {
+      console.error('Redis Error:', error);
+    });
+  });
+};
+
+export const getRedisClients = async (chConfig: ChConfig): Promise<RedisClients> => {
+  const { host, port } = chConfig.redis.client;
+  console.log('REDIS CLIENT', host, port);
+  // pub sub
+  await startRedisServerProccess(port);
+  const pubRedis: RedisClientType = createClient({ url: `redis://${host}:${port}` });
+  const subRedis: RedisClientType = pubRedis.duplicate();
+  const liveCntRedis = pubRedis.duplicate();
 
   const promisePub = new Promise((resolve, reject) => {
     pubRedis.connect();
@@ -106,13 +119,17 @@ export const getRedisClients = async (topConnection: string, contract?: Contract
 export const startRedisServerProccess = (port: number) => {
   return new Promise((resolve, reject) => {
     const redisServer = spawn('redis-server', ['--port', `${port}`]);
-
+    // redis-server ./redis.conf --port 6380 &
     redisServer.stdout.on('data', (data: string) => {
       resolve(redisServer); // Redis サーバーが起動したら resolve
     });
 
     redisServer.stderr.on('data', (data: string) => {
       reject(new Error(`Redis server failed to start: ${data}`)); // エラーが発生したら reject
+    });
+
+    redisServer.stderr.on('error', (error: string) => {
+      reject(new Error(`Redis server error: ${error}`)); // エラーが発生したら reject
     });
 
     redisServer.on('close', (code: string) => {});
