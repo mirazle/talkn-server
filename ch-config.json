@@ -1,0 +1,166 @@
+{
+  "nginx": { "location": "/", "proxyWssServer": "127.0.0.1", "proxyWssPort": 10444 },
+  "redis": {
+    "client": { "host": "127.0.0.1", "port": 6380 },
+    "cluster": [
+      { "host": "127.0.0.1", "port": 6381 },
+      { "host": "127.0.0.1", "port": 6382 },
+      { "host": "127.0.0.1", "port": 6383 },
+      { "host": "127.0.0.1", "port": 6384 },
+      { "host": "127.0.0.1", "port": 6385 },
+      { "host": "127.0.0.1", "port": 6386 }
+    ]
+  },
+  "accept": { "rankAll": false },
+  "children": [
+    {
+      "nginx": { "location": "aa.com/", "proxyWssServer": "127.0.0.1", "proxyWssPort": 10445 },
+      "redis": {
+        "client": { "host": "127.0.0.1", "port": 6390 },
+        "cluster": [
+          { "host": "127.0.0.1", "port": 6391 },
+          { "host": "127.0.0.1", "port": 6392 },
+          { "host": "127.0.0.1", "port": 6393 },
+          { "host": "127.0.0.1", "port": 6394 },
+          { "host": "127.0.0.1", "port": 6395 },
+          { "host": "127.0.0.1", "port": 6396 }
+        ]
+      },
+      "accept": { "rankAll": false },
+      "children": [
+        {
+          "nginx": { "location": "11/", "proxyWssServer": "127.0.0.1", "proxyWssPort": 10446 },
+          "redis": {
+            "client": { "host": "127.0.0.1", "port": 6400 },
+            "cluster": [
+              { "host": "127.0.0.1", "port": 6401 },
+              { "host": "127.0.0.1", "port": 6402 },
+              { "host": "127.0.0.1", "port": 6403 },
+              { "host": "127.0.0.1", "port": 6404 },
+              { "host": "127.0.0.1", "port": 6405 },
+              { "host": "127.0.0.1", "port": 6406 }
+            ]
+          },
+          "accept": { "rankAll": false },
+          "children": []
+        }
+      ]
+    },
+    {
+      "nginx": { "location": "bb.com/", "proxyWssServer": "127.0.0.1", "proxyWssPort": 10447 },
+      "redis": {
+        "client": { "host": "127.0.0.1", "port": 6410 },
+        "cluster": [
+          { "host": "127.0.0.1", "port": 6411 },
+          { "host": "127.0.0.1", "port": 6412 },
+          { "host": "127.0.0.1", "port": 6413 },
+          { "host": "127.0.0.1", "port": 6414 },
+          { "host": "127.0.0.1", "port": 6415 },
+          { "host": "127.0.0.1", "port": 6416 }
+        ]
+      },
+      "accept": { "rankAll": false },
+      "children": [
+        {
+          "nginx": { "location": "11/22/", "proxyWssServer": "127.0.0.1", "proxyWssPort": 10448 },
+          "redis": {
+            "client": { "host": "127.0.0.1", "port": 6420 },
+            "cluster": [
+              { "host": "127.0.0.1", "port": 6421 },
+              { "host": "127.0.0.1", "port": 6422 },
+              { "host": "127.0.0.1", "port": 6423 },
+              { "host": "127.0.0.1", "port": 6424 },
+              { "host": "127.0.0.1", "port": 6425 },
+              { "host": "127.0.0.1", "port": 6426 }
+            ]
+          },
+          "accept": { "rankAll": false },
+          "children": [
+            {
+              "nginx": { "location": "BBBB/", "proxyWssServer": "127.0.0.1", "proxyWssPort": 10449 },
+              "redis": {
+                "client": { "host": "127.0.0.1", "port": 6430 },
+                "cluster": [
+                  { "host": "127.0.0.1", "port": 6431 },
+                  { "host": "127.0.0.1", "port": 6432 },
+                  { "host": "127.0.0.1", "port": 6433 },
+                  { "host": "127.0.0.1", "port": 6434 },
+                  { "host": "127.0.0.1", "port": 6435 },
+                  { "host": "127.0.0.1", "port": 6436 }
+                ]
+              },
+              "accept": { "rankAll": false },
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "nginx": { "location": "cc.com/", "proxyWssServer": "127.0.0.1", "proxyWssPort": 10450 },
+      "redis": {
+        "client": { "host": "127.0.0.1", "port": 6440 },
+        "cluster": [
+          { "host": "127.0.0.1", "port": 6441 },
+          { "host": "127.0.0.1", "port": 6442 },
+          { "host": "127.0.0.1", "port": 6443 },
+          { "host": "127.0.0.1", "port": 6444 },
+          { "host": "127.0.0.1", "port": 6445 },
+          { "host": "127.0.0.1", "port": 6446 }
+        ]
+      },
+      "accept": { "rankAll": false },
+      "children": []
+    },
+    {
+      "nginx": { "location": "dd.com/", "proxyWssServer": "127.0.0.1", "proxyWssPort": 10451 },
+      "redis": {
+        "client": { "host": "127.0.0.1", "port": 6450 },
+        "cluster": [
+          { "host": "127.0.0.1", "port": 6451 },
+          { "host": "127.0.0.1", "port": 6452 },
+          { "host": "127.0.0.1", "port": 6453 },
+          { "host": "127.0.0.1", "port": 6454 },
+          { "host": "127.0.0.1", "port": 6455 },
+          { "host": "127.0.0.1", "port": 6456 }
+        ]
+      },
+      "accept": { "rankAll": false },
+      "children": [
+        {
+          "nginx": { "location": "a11/b22/", "proxyWssServer": "127.0.0.1", "proxyWssPort": 10452 },
+          "redis": {
+            "client": { "host": "127.0.0.1", "port": 6460 },
+            "cluster": [
+              { "host": "127.0.0.1", "port": 6461 },
+              { "host": "127.0.0.1", "port": 6462 },
+              { "host": "127.0.0.1", "port": 6463 },
+              { "host": "127.0.0.1", "port": 6464 },
+              { "host": "127.0.0.1", "port": 6465 },
+              { "host": "127.0.0.1", "port": 6466 }
+            ]
+          },
+          "accept": { "rankAll": false },
+          "children": [
+            {
+              "nginx": { "location": "sBBBB/", "proxyWssServer": "127.0.0.1", "proxyWssPort": 10453 },
+              "redis": {
+                "client": { "host": "127.0.0.1", "port": 6470 },
+                "cluster": [
+                  { "host": "127.0.0.1", "port": 6471 },
+                  { "host": "127.0.0.1", "port": 6472 },
+                  { "host": "127.0.0.1", "port": 6473 },
+                  { "host": "127.0.0.1", "port": 6474 },
+                  { "host": "127.0.0.1", "port": 6475 },
+                  { "host": "127.0.0.1", "port": 6476 }
+                ]
+              },
+              "accept": { "rankAll": false },
+              "children": []
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -18,15 +18,79 @@ talkn-common リポジトリを clone します。
 
 ## redis-server
 
-6379 が rootServer。それ以外は chServer です。
-rootServer は必須起動。chServer は必要に応じて起動します。
+1 つの ch はクラスター構成に必要な最低 6 つの redis-server を持ちます。
 
 ```
-redis-server --port 6379 &
-redis-server --port 6380 &
+redis-cli shutdown
+pkill -f redis-server
+
+redis-server redis/6380/redis-server.conf &
+redis-server redis/6381/redis-server.conf &
+redis-server redis/6382/redis-server.conf &
+redis-server redis/6383/redis-server.conf &
+redis-server redis/6384/redis-server.conf &
+redis-server redis/6385/redis-server.conf &
+
+redis-cli -p 6380 FLUSHALL
+redis-cli -p 6380 CLUSTER RESET
+redis-cli -p 6381 FLUSHALL
+redis-cli -p 6381 CLUSTER RESET
+redis-cli -p 6382 FLUSHALL
+redis-cli -p 6382 CLUSTER RESET
+redis-cli -p 6383 FLUSHALL
+redis-cli -p 6383 CLUSTER RESET
+redis-cli -p 6384 FLUSHALL
+redis-cli -p 6384 CLUSTER RESET
+redis-cli -p 6385 FLUSHALL
+redis-cli -p 6385 CLUSTER RESET
+
+echo "yes" | redis-cli --cluster create 127.0.0.1:6380 127.0.0.1:6381 127.0.0.1:6382 127.0.0.1:6383 127.0.0.1:6384 127.0.0.1:6385 --cluster-replicas 1
+
+ps aux | grep redis-server | grep -v grep
+lsof -i :6379
+
+redis-cli shutdown
+pkill -f redis-server
+
 ```
 
-# Nginx(openRestry)
+TCP バックログ(待ち受け可能な TCP セッション数)の OS のデフォルト値は 128 ですが、Redis のデフォルトでは 511 が指定されているため、OS のバックログを拡張します。
+
+```
+sudo sysctl -w kern.ipc.somaxconn=512
+sysctl kern.ipc.somaxconn
+```
+
+## apache-kafka
+
+redis だけだと ch 同士の通信を行う際に単一障害点が発生してしまうので。
+このコマンドにより、Kafka と ZooKeeper がインストールされます。Kafka は ZooKeeper を使用してクラスターの状態を管理します。
+
+```
+brew install kafka
+brew services start zookeeper
+brew services start kafka
+```
+
+トピックの作成
+
+```
+kafka-topics --create --topic test --partitions 1 --replication-factor 1 --bootstrap-server localhost:9092
+```
+
+プロデューサーからのメッセージ送信
+
+```
+kafka-console-producer --topic test --bootstrap-server localhost:9092
+```
+
+コンシューマーでのメッセージ受信。別のターミナルウィンドウを開いて、以下のコマンドを実行します。
+
+```
+kafka-console-consumer --topic test --from-beginning --bootstrap-server localhost:9092
+```
+
+## jq
 
 ```
 brew install jq
@@ -37,6 +101,8 @@ brew install だと最新しかインストール出来ない。
 2024 年 2 月時点の stable バージョンをソースからインストールします。
 Stable release
 1.21.4.2 / June 21, 2023;
+
+## open-resty
 
 ```
 curl -O https://openresty.org/download/openresty-1.21.4.2.tar.gz

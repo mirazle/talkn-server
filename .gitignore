@@ -1,7 +1,11 @@
 node_modules/
 dist/
 logs/
+nginx/nginx.pid
 isolate-*
 processed.txt
 certs/*
+redis/*
+db.rdb
 dump.rdb
+appendonlydir
