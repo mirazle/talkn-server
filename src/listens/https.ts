@@ -8,7 +8,6 @@ const getHttpsServer = async (port: number): Promise<https.Server> => {
   return new Promise((resolve) => {
     const httpsServer = https.createServer(ssl);
     httpsServer.listen(port, () => {
-      console.log('LISTEN HTTTPS');
       resolve(httpsServer);
     });
   });

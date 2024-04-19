@@ -22,6 +22,10 @@ fs.readFile('ch-config.json', 'utf8', async (err, json) => {
     const myChConfig = ChConfigModel.getMyChConfig({ chConfigJson, topConnection });
     const myChRoots = ChConfigModel.getMyChRoots({ chConfigJson, topConnection });
 
+    console.info('@@@@@@@@@@@ TOP CONNECTION @@@@@@@@@@@');
+    console.info(topConnection);
+    console.info('@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@');
+
     const ioPort = isRootConnection ? Number(io.root.port) : Number(myChConfig?.nginx.proxyWssPort);
     const listend = await listens(ioPort, myChConfig);
     const talknIo = new TalknIo(topConnection, listend, myChConfig);

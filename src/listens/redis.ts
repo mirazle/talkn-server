@@ -3,10 +3,12 @@ import { exec, spawn } from 'child_process';
 import { RedisClientType, createClient } from 'redis';
 
 import conf from '@server/conf';
-import { ChConfig } from '@common/models/ChConfig';
-import ChModel, { Connection } from '@common/models/Ch';
+import { ChConfig, Redis as RedisConfig } from '@common/models/ChConfig';
+import ChModel, { Connection, ParentConnection } from '@common/models/Ch';
+import { RangeWithScore } from '@server/common/models/Rank';
 
-const { redis } = conf;
+const { serverOption, redis } = conf;
+const { limit } = redis;
 
 export type RedisMessage = {
   connection: Connection;
@@ -18,39 +20,100 @@ export type RedisScore = {
   value: string;
 };
 
-class TalknRedis {
-  static get host() {
-    return process.env.REDIS_HOST || '127.0.0.1';
-  }
-
-  static rootPubError(err: string) {
-    console.error('Redis rootPubClient error:', err);
-  }
-
-  static rootSubError(err: string) {
-    console.error('Redis rootSubClient error:', err);
-  }
-
-  static chPubError(err: string) {
-    console.error('Redis chPubClient error:', err);
-  }
-
-  static chSubError(err: string) {
-    console.error('Redis chSubClient error:', err);
-  }
-
-  static chLiveError(err: string) {
-    console.error('Redis chSubClient error:', err);
-  }
-}
-
-export default TalknRedis;
-
 export type RedisClients = {
   pubRedis: RedisClientType;
   subRedis: RedisClientType;
   liveCntRedis: RedisClientType;
 };
+
+export class TalknRedis {
+  private config: RedisConfig;
+  private cluster: Redis.Cluster;
+  private clients: RedisClients;
+  private get pubClient() {
+    return this.clients.pubRedis;
+  }
+
+  private get subClient() {
+    return this.clients.subRedis;
+  }
+
+  private get liveCntClient() {
+    return this.clients.liveCntRedis;
+  }
+  public get ioAdapters() {
+    return {
+      pub: this.clients.pubRedis,
+      sub: this.clients.subRedis,
+    };
+  }
+  constructor(chConfig: ChConfig) {
+    this.config = chConfig.redis;
+    this.cluster = new Redis.Cluster(this.config.cluster);
+
+    const { host, port } = this.config.client;
+    const pubRedis: RedisClientType = createClient({ url: `redis://${host}:${port}` });
+    const subRedis: RedisClientType = pubRedis.duplicate();
+    const liveCntRedis: RedisClientType = pubRedis.duplicate();
+    this.clients = { pubRedis, subRedis, liveCntRedis };
+  }
+  public async connect() {
+    const { client } = this.config;
+    // cluster
+    const promiseCluster = new Promise((resolve, reject) => {
+      this.cluster.on('connect', resolve);
+    });
+
+    // pub sub & live
+    await startRedisServerProccess(client.port);
+    const promisePub = new Promise((resolve, reject) => {
+      this.clients.pubRedis.on('connect', resolve);
+      this.clients.pubRedis.connect();
+    });
+    const promiseSub = new Promise((resolve, reject) => {
+      this.clients.subRedis.on('connect', resolve);
+      this.clients.subRedis.connect();
+    });
+    const promiseLiveCnt = new Promise((resolve, reject) => {
+      this.clients.liveCntRedis.on('connect', resolve);
+      this.clients.liveCntRedis.connect();
+      deleteAllSortSets(this.clients.liveCntRedis, '*');
+    });
+
+    await Promise.all([promiseCluster, promisePub, promiseSub, promiseLiveCnt]);
+
+    return this;
+  }
+
+  public async getScores(methodKey: string, parentConnection: ParentConnection): Promise<RangeWithScore[]> {
+    return new Promise(async (resolve) => {
+      if (parentConnection) {
+        const rangeWithScores = await this.liveCntClient.zRangeWithScores(`${methodKey}:${parentConnection}`, 0, limit, { REV: true });
+        resolve(rangeWithScores);
+      } else {
+        resolve([{ score: 0, value: '' }]);
+      }
+    });
+  }
+
+  public async putScore(key: string, value: string, score: number) {
+    if (score === 0) {
+      await this.liveCntClient.zRem(key, value);
+    } else {
+      await this.liveCntClient.zAdd(key, { value, score });
+    }
+  }
+
+  public async subscribe(key: string, callback: (key: string, message: string) => void) {
+    this.subClient.subscribe(key, (message) => callback(key, message));
+  }
+
+  public async publish(key: string, message: RedisMessage) {
+    this.pubClient.publish(key, JSON.stringify(message));
+  }
+}
+
+export default TalknRedis;
 
 export const deleteAllSortSets = async (redisClient: RedisClientType, pattern: string): Promise<void> => {
   let cursor = 0;
@@ -74,7 +137,6 @@ export const deleteAllSortSets = async (redisClient: RedisClientType, pattern: s
 
 export const getRedisCluster = async (chConfig: ChConfig): Promise<Redis.Cluster> => {
   return new Promise((resolve) => {
-    console.log('REDIS CLUSTER', chConfig.redis.cluster);
     const cluster = new Redis.Cluster(chConfig.redis.cluster);
     cluster.on('connect', () => {
       resolve(cluster);
@@ -91,7 +153,7 @@ export const getRedisCluster = async (chConfig: ChConfig): Promise<Redis.Cluster
 
 export const getRedisClients = async (chConfig: ChConfig): Promise<RedisClients> => {
   const { host, port } = chConfig.redis.client;
-  console.log('REDIS CLIENT', host, port);
+
   // pub sub
   await startRedisServerProccess(port);
   const pubRedis: RedisClientType = createClient({ url: `redis://${host}:${port}` });

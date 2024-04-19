@@ -1,4 +1,5 @@
 import { Socket, Server } from 'socket.io';
+import * as Redis from 'ioredis';
 import { createAdapter } from '@socket.io/redis-adapter';
 
 import ChModel, { Connection, ParentConnection } from '@common/models/Ch';
@@ -12,7 +13,7 @@ import conf from '@server/conf';
 
 import { ListensReturn } from '.';
 import { isValidKey } from '@common/utils';
-import { RedisMessage } from './redis';
+import TalknRedis, { RedisClients, RedisMessage } from './redis';
 import { ChConfig } from '@common/models/ChConfig';
 
 const { serverOption, redis } = conf;
@@ -33,37 +34,31 @@ export type ConnectionType =
 // io、redisインスタンスを跨ぐ処理を定義
 class TalknIo {
   static namespace: string = ChModel.rootConnection;
+  chConfig: ChConfig;
   topConnection: string;
   server: Server;
-  listend: ListensReturn;
-  chConfig: ChConfig | null;
-  get isRootServer() {
+  redis: TalknRedis;
+  public get isRootServer() {
     return this.topConnection === ChModel.rootConnection;
   }
-  constructor(topConnection: string, listend: ListensReturn, chConfig: ChConfig | null) {
-    this.topConnection = topConnection;
-    this.listend = listend;
-    this.chConfig = chConfig;
-    this.server = new Server(listend.httpsServer, serverOption);
-    this.server.adapter(createAdapter(listend.redisClients.pubRedis, listend.redisClients.subRedis));
-    this.getConnectionType = this.getConnectionType.bind(this);
-
-    this.handleOnRootSubscribe();
-  }
-  public getConnectionType(connection: Connection = ChModel.rootConnection): ConnectionType {
-    const { isRootServer, topConnection, chConfig } = this;
-    if (isRootServer && topConnection === connection) return connectionTypeRoot;
-
-    const isContract = Boolean(chConfig);
-    if (isContract) {
-      return topConnection === connection ? connectionTypeContractTop : connectionTypeContract;
-    } else {
-      return connection.split(ChModel.rootConnection).length === 3 ? connectionTypeUnContractTop : connectionTypeUnContract;
-    }
-  }
-  public getTopConnectionUserCnt(): number {
+  public get topConnectionUserCnt(): number {
     return this.server.engine.clientsCount;
   }
+  constructor(topConnection: string, listend: ListensReturn, chConfig: ChConfig) {
+    const { httpsServer, redis } = listend;
+
+    this.chConfig = chConfig;
+    this.topConnection = topConnection;
+    this.server = new Server(httpsServer, serverOption);
+    this.server.adapter(createAdapter(redis.ioAdapters.pub, redis.ioAdapters.sub));
+    this.redis = redis;
+
+    this.handleOnSubscribe();
+  }
+
+  /************
+   * IO
+   ************/
 
   public getLiveCnt(socket: Socket, connection: string, isIncrement = true): number {
     isIncrement ? socket.join(connection) : socket.leave(connection);
@@ -75,185 +70,83 @@ class TalknIo {
     this.server.on(connection, callback);
   }
 
-  public async getRedisScores(methodKey: string, parentConnection: ParentConnection): Promise<RangeWithScore[]> {
-    return new Promise(async (resolve) => {
-      if (parentConnection) {
-        const { liveCntRedis } = this.listend.redisClients;
-        const rangeWithScores = await liveCntRedis.zRangeWithScores(`${methodKey}:${parentConnection}`, 0, limit, { REV: true });
-        resolve(rangeWithScores);
-      } else {
-        resolve([{ score: 0, value: '' }]);
-      }
-    });
-  }
-
-  public async putChRank(parentConnection: ParentConnection, connection: Connection, liveCnt: number, isPublishToRoot = true) {
-    const { listend, getConnectionType } = this;
-    const { liveCntRedis } = listend.redisClients;
-    const connections = ChModel.getConnections(connection);
-    const connectionType = getConnectionType(connection);
-
-    const put = async (methodKey: string, keyConnection: Connection, registConnection: Connection, registLiveCnt: number) => {
-      const parentKeyConnection = ChModel.getParentConnection(keyConnection);
-      if (parentKeyConnection) {
-        if (registLiveCnt === 0) {
-          await liveCntRedis.zRem(`${methodKey}:${parentKeyConnection}`, registConnection);
-        } else {
-          await liveCntRedis.zAdd(`${methodKey}:${parentKeyConnection}`, { value: registConnection, score: registLiveCnt });
-        }
-      }
-      return true;
-    };
-
-    switch (connectionType) {
-      case connectionTypeRoot:
-        return false;
-      case connectionTypeContractTop:
-        if (isPublishToRoot) {
-          // subscribeした後にput(更新)する
-          this.publishToRoot(`${tuneOptionRank}:${connection}`, { connection, liveCnt });
-        }
-        return true;
-      case connectionTypeContract:
-      // const topConnection = ChModel.getTopConnection(connection);
-      // this.publishToRoot(`${tuneOptionRankAll}:${topConnection}`, { connection: topConnection, liveCnt });
-      case connectionTypeUnContractTop:
-      case connectionTypeUnContract:
-        /*
-        let rankAllPromises: Promise<boolean>[] = [];
-        connections.forEach((keyConnection) => {
-          console.log('rankAll put', keyConnection);
-          rankAllPromises.push(put(tuneOptionRankAll, keyConnection, connection, liveCnt));
-        });
-        await Promise.all(rankAllPromises);
-        */
-        put(tuneOptionRank, connection, connection, liveCnt);
-        return true;
-    }
-  }
-
-  public async putChRankAll(parentConnection: ParentConnection, connection: Connection, liveCnt: number, isPublishToRoot = true) {
-    const { listend, getConnectionType } = this;
-    const { liveCntRedis } = listend.redisClients;
-    const connections = ChModel.getConnections(connection);
-    const connectionType = getConnectionType(connection);
-
-    const put = async (methodKey: string, keyConnection: Connection, connection: Connection, registLiveCnt: number) => {
-      const registConnection = ChModel.getParentConnection(keyConnection);
-      if (registConnection) {
-        if (registLiveCnt === 0) {
-          await liveCntRedis.zRem(`${methodKey}:${registConnection}`, connection);
-        } else {
-          await liveCntRedis.zAdd(`${methodKey}:${registConnection}`, { value: connection, score: registLiveCnt });
-        }
-      }
-      return true;
-    };
-
-    switch (connectionType) {
-      case connectionTypeRoot:
-      case connectionTypeContractTop:
-        return false;
-      case connectionTypeContract:
-        if (isPublishToRoot) {
-          const topConnection = ChModel.getTopConnection(connection);
-          this.publishToRoot(`${tuneOptionRankAll}:${topConnection}`, { connection: topConnection, liveCnt });
-        }
-      case connectionTypeUnContractTop:
-      case connectionTypeUnContract:
-        let rankAllPromises: Promise<boolean>[] = [];
-        connections.forEach((keyConnection) => {
-          rankAllPromises.push(put(tuneOptionRankAll, keyConnection, connection, liveCnt));
-
-          if (isPublishToRoot) {
-            if (keyConnection === ChModel.rootConnection) {
-              this.publishToRoot(`${tuneOptionRankAll}:${keyConnection}`, { connection, liveCnt });
-            }
-          }
-        });
-        await Promise.all(rankAllPromises);
-        return true;
-    }
-  }
-
-  private async handleOnRootSubscribe() {
-    const { isRootServer, chConfig, listend } = this;
-    if (isRootServer) {
-      const { subRedis } = listend.redisClients;
-      const rankRootKey = `${tuneOptionRank}:${ChModel.rootConnection}`;
-      const rankRootAllKey = `${tuneOptionRankAll}:${ChModel.rootConnection}`;
-
-      const callback = (methodKey: string, message: string) => {
-        const redisMessage = JSON.parse(message) as RedisMessage;
-        this.subscribeFromCh(methodKey, redisMessage);
-      };
-
-      subRedis.subscribe(rankRootKey, (message) => callback(rankRootKey, message));
-      subRedis.subscribe(rankRootAllKey, (message) => callback(rankRootAllKey, message));
-
-      // contracts.forEach((contract: Contract) => {
-      if (chConfig) {
-        const topConnection = ChModel.getConnection(chConfig.nginx.location);
-        const rankKey = `${tuneOptionRank}:${topConnection}`;
-        const rankAllKey = `${tuneOptionRankAll}:${topConnection}`;
-        subRedis.subscribe(rankKey, (message) => callback(rankKey, message));
-        subRedis.subscribe(rankAllKey, (message) => callback(rankAllKey, message));
-      }
-      // });
-    }
-  }
-
-  public async publishToRoot(methodKey: string, redisMessage: RedisMessage) {
-    const { pubRedis } = this.listend.redisClients;
-
-    // onRootSubscribeToBroacast内のsubscribeでキャッチ
-    pubRedis.publish(methodKey, JSON.stringify(redisMessage));
-    console.log('@@@@@@@@@ REDIS PUB(CH)', methodKey, redisMessage);
-  }
-
-  public async subscribeFromCh(methodKey: string, redisMessage: RedisMessage) {
-    const [type, connection] = methodKey.split(':');
-
-    // 契約サーバーからsubscribeした時に、契約サーバーのliveCntで上書きしてしまう。
-    // マージするべき
-
-    // そもそもpublishする契約サーバー側でもbroadcastしているので、二重でbroadcastしてない？
-    switch (type) {
-      case tuneOptionRank:
-        await this.putChRank(methodKey, redisMessage.connection, redisMessage.liveCnt, false);
-        break;
-      case tuneOptionRankAll:
-        await this.putChRankAll(methodKey, redisMessage.connection, redisMessage.liveCnt, false);
-        break;
-    }
-
-    const rootScores = await this.getRedisScores(methodKey, ChModel.rootConnection);
-    console.log('SUBSCRIBE @@@', type, methodKey, redisMessage.connection, redisMessage.liveCnt, rootScores);
-    if (rootScores.length > 0) {
-      const rank = rootScores.map((score) => new LightRankModel(score));
-
-      this.broadcast(type, connection, { [type]: rank });
+  async emit(socket: Socket, connection: ParentConnection | Connection, response: Partial<Responses>) {
+    if (connection) {
+      socket.emit(connection, response);
+    } else {
+      console.warn('No Connection');
     }
   }
 
   async broadcast(type: string, connection: ParentConnection | Connection, response: Partial<Responses>) {
     if (connection) {
-      console.log('@@@@@@@@@ BROARDCAST', type, connection, { ...response, type });
+      // console.log('@@@@@@@@@ BROARDCAST', type, connection, { ...response, type });
       this.server.emit(connection, { ...response, type });
+    } else {
+      console.warn('No Connection');
     }
+  }
+
+  /************
+   * REDIS
+   ************/
+
+  // 自分自身のconnectionでのsubscribeを受け付ける
+  private async handleOnSubscribe() {
+    // define
+    const { chConfig } = this;
+    const subscribeRankKey = `${tuneOptionRank}:${chConfig.connection}`;
+    const subscribeRankAllKey = `${tuneOptionRankAll}:${chConfig.connection}`;
+    const callback = async (methodKey: string, message: string) => {
+      const [type, connection] = methodKey.split(':');
+      const redisMessage = JSON.parse(message) as RedisMessage;
+      switch (type) {
+        case tuneOptionRank:
+          await this.putChRank(connection, redisMessage.connection, redisMessage.liveCnt);
+          break;
+        case tuneOptionRankAll:
+          await this.putChRankAll(redisMessage.connection, redisMessage.liveCnt);
+          break;
+      }
+    };
+
+    // logics
+    this.redis.subscribe(subscribeRankKey, callback);
+    this.redis.subscribe(subscribeRankAllKey, callback);
   }
 
   async getChRank(methodKey: string, connection: ParentConnection | Connection): Promise<LightRank[]> {
     let rank: LightRank[] = [];
-    const scores = await this.getRedisScores(methodKey, connection);
+    const scores = await this.redis.getScores(methodKey, connection);
     if (scores.length > 0) {
       rank = scores.map((score) => new LightRankModel(score) as LightRank);
     }
     return rank;
   }
 
-  async emit(socket: Socket, connection: string, response: Partial<Responses>) {
-    socket.emit(connection, response);
+  public async putChRank(parentConnection: ParentConnection, tuneConnection: Connection, liveCnt: number) {
+    if (parentConnection) {
+      await this.redis.putScore(`${tuneOptionRank}:${parentConnection}`, tuneConnection, liveCnt);
+    }
+  }
+
+  public async putChRankAll(tuneConnection: Connection, liveCnt: number) {
+    // define
+    const tuneConnections = ChModel.getConnections(tuneConnection);
+    const rankAllPromises: Promise<boolean>[] = [];
+    const put = async (loopConnection: Connection, liveCnt: number) => {
+      const parentConnection = ChModel.getParentConnection(loopConnection);
+      if (parentConnection) {
+        await this.redis.putScore(`${tuneOptionRankAll}:${parentConnection}`, loopConnection, liveCnt);
+      }
+      return true;
+    };
+
+    // logics
+    tuneConnections.forEach((loopConnection) => {
+      rankAllPromises.push(put(loopConnection, liveCnt));
+    });
+    await Promise.all(rankAllPromises);
   }
 }
 export default TalknIo;

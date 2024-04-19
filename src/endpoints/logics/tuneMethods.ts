@@ -2,66 +2,54 @@ import ChModel, { Connection, ParentConnection } from '@common/models/Ch';
 import { TuneOption, tuneOptionRank, tuneOptionRankAll } from '@common/models/TuneOption';
 import { Response } from '@server/endpoints/tune';
 import { LightRank, LightRankModel } from '@server/common/models/Rank';
-import TalknIo, {
-  connectionTypeContract,
-  connectionTypeContractTop,
-  connectionTypeRoot,
-  connectionTypeUnContract,
-  connectionTypeUnContractTop,
-} from '@server/listens/io';
+import TalknIo from '@server/listens/io';
 
 const tuneMethods: { [key in keyof TuneOption]: Function } = {
-  rank: async (talknIo: TalknIo, parentConnection: ParentConnection, connection: Connection, response: Partial<Response>) => {
-    const { getConnectionType } = talknIo;
-    const selfConnectionType = getConnectionType(connection);
-    const liveCnt = response.tuneCh!.liveCnt;
+  rank: async (talknIo: TalknIo, parentConnection: ParentConnection, tuneConnection: Connection, liveCnt: number) => {
     let parentBelongRank: LightRank[] = [];
     let selfBelongRank: LightRank[] = [];
-    let isExistParentRank = false;
-    switch (selfConnectionType) {
-      case connectionTypeRoot:
-        selfBelongRank = await talknIo.getChRank(tuneOptionRank, ChModel.rootConnection);
-        break;
-      case connectionTypeContractTop:
-      case connectionTypeUnContractTop:
-      case connectionTypeContract:
-      case connectionTypeUnContract:
-        parentBelongRank = await talknIo.getChRank(tuneOptionRank, parentConnection);
-        isExistParentRank = Boolean(parentBelongRank.find((pr) => pr.connection === connection));
-        if (isExistParentRank) {
-          parentBelongRank = parentBelongRank.map((pr) => (pr.connection === connection ? { ...pr, liveCnt } : pr));
-        } else {
-          parentBelongRank = [...parentBelongRank, { connection, liveCnt }];
-        }
 
-        // 先に生成されていたchildrenのconnectionが存在した場合のために、自身のconnectionが所有するrankChildrenを返す
-        selfBelongRank = await talknIo.getChRank(tuneOptionRank, connection);
-        break;
+    if (tuneConnection === ChModel.rootConnection) {
+      selfBelongRank = await talknIo.getChRank(tuneOptionRank, tuneConnection);
+    } else {
+      parentBelongRank = await talknIo.getChRank(tuneOptionRank, parentConnection);
+      const isIncludeTuneConnection = Boolean(parentBelongRank.find((pr) => pr.connection === tuneConnection));
+      if (isIncludeTuneConnection) {
+        parentBelongRank = parentBelongRank.map((pr) => (pr.connection === tuneConnection ? { ...pr, liveCnt } : pr));
+      } else {
+        parentBelongRank = [...parentBelongRank, { connection: tuneConnection, liveCnt }];
+      }
+
+      // 先に生成されていた子供のconnectionが存在した場合のために、自身のconnectionが所有するrankを返す
+      selfBelongRank = await talknIo.getChRank(tuneOptionRank, tuneConnection);
     }
-    return { ...response, parentBelongRank, selfBelongRank };
+
+    return { parentBelongRank, selfBelongRank };
   },
-  rankAll: async (talknIo: TalknIo, parentConnection: ParentConnection, connection: Connection, response: Partial<Response>) => {
+  rankAll: async (talknIo: TalknIo, parentConnection: ParentConnection, tuneConnection: Connection, response: Partial<Response>) => {
     // 契約サーバーの場合、/にrankAllが反映されていない
-    const connections = ChModel.getConnections(connection);
+    const tuneConnections = ChModel.getConnections(tuneConnection);
     const rankAllPromises: Promise<{ [key in Connection]: LightRank[] }>[] = [];
-    connections.forEach((keyConnection: Connection) => {
+    const tuneLiveCnt = response.tuneCh!.liveCnt;
+
+    tuneConnections.forEach((loopConnection: Connection) => {
       rankAllPromises.push(
         new Promise(async (resolve) => {
-          const tuneLiveCnt = response.tuneCh!.liveCnt;
-          let chRank = await talknIo.getChRank(tuneOptionRankAll, keyConnection);
-          let isExistConnection = false;
+          let chRank = await talknIo.getChRank(tuneOptionRankAll, loopConnection);
+          let isIncludeTuneConnection = false;
+
           if (chRank.length >= 1) {
-            isExistConnection = Boolean(chRank.find((cr) => cr.connection === connection));
+            isIncludeTuneConnection = Boolean(chRank.find((cr) => cr.connection === tuneConnection));
           }
 
-          if (isExistConnection) {
-            chRank = chRank.map((cr) => (cr.connection === connection ? { ...cr, liveCnt: tuneLiveCnt } : cr));
+          if (isIncludeTuneConnection) {
+            chRank = chRank.map((cr) => (cr.connection === tuneConnection ? { ...cr, liveCnt: tuneLiveCnt } : cr));
           } else {
-            if (keyConnection !== connection) {
-              chRank = [...chRank, { connection, liveCnt: tuneLiveCnt } as LightRank];
+            if (loopConnection !== tuneConnection) {
+              chRank = [...chRank, { connection: tuneConnection, liveCnt: tuneLiveCnt } as LightRank];
             }
           }
-          resolve({ [keyConnection]: chRank });
+          resolve({ [loopConnection]: chRank });
         })
       );
     });

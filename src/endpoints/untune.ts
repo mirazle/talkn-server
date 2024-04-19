@@ -16,7 +16,7 @@ export type Response = {
   rankAll: Types['Rank'];
 };
 
-export default async (talknIo: TalknIo, socket: Socket, chConfig: ChConfig | null, request?: Request) => {
+export default async (talknIo: TalknIo, socket: Socket, chConfig: ChConfig, request?: Request) => {
   const { topConnection } = talknIo;
   const { query } = socket.handshake;
   const { headers } = socket.request;

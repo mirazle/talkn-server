@@ -6,6 +6,6 @@ export type Request = {};
 
 export type Response = {};
 
-export default async (talknIo: TalknIo, socket: Socket, chConfig: ChConfig | null, request?: Request) => {
+export default async (talknIo: TalknIo, socket: Socket, chConfig: ChConfig, request?: Request) => {
   console.log('fetchChDetail', request);
 };
