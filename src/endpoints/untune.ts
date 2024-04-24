@@ -40,7 +40,7 @@ export default async (talknIo: TalknIo, socket: Socket, chConfig: ChConfig, requ
     await talknIo.broadcast('rank', connection, { rank: selfRank });
 
     // update status
-    talknIo.putChRank(parentConnection, connection, liveCnt);
+    // talknIo.putChRank(parentConnection, connection, liveCnt);
   } else {
     console.warn('BAD CONNECTION', connection, talknIo.topConnection);
   }

@@ -5,13 +5,17 @@ import { RedisClientType, createClient } from 'redis';
 import conf from '@server/conf';
 import { ChConfig, Redis as RedisConfig } from '@common/models/ChConfig';
 import ChModel, { Connection, ParentConnection } from '@common/models/Ch';
+import { tuneOptionRank, tuneOptionRankAll } from '@common/models/TuneOption';
 import { RangeWithScore } from '@server/common/models/Rank';
 
 const { serverOption, redis } = conf;
 const { limit } = redis;
 
+export type RedisMessageMethod = typeof tuneOptionRank | typeof tuneOptionRankAll;
+
 export type RedisMessage = {
-  connection: Connection;
+  method: RedisMessageMethod;
+  connections: Connection[];
   liveCnt: number;
 };
 
@@ -85,15 +89,8 @@ export class TalknRedis {
     return this;
   }
 
-  public async getScores(methodKey: string, parentConnection: ParentConnection): Promise<RangeWithScore[]> {
-    return new Promise(async (resolve) => {
-      if (parentConnection) {
-        const rangeWithScores = await this.liveCntClient.zRangeWithScores(`${methodKey}:${parentConnection}`, 0, limit, { REV: true });
-        resolve(rangeWithScores);
-      } else {
-        resolve([{ score: 0, value: '' }]);
-      }
-    });
+  public async getScores(key: string): Promise<RangeWithScore[]> {
+    return await this.liveCntClient.zRangeWithScores(key, 0, limit, { REV: true });
   }
 
   public async putScore(key: string, value: string, score: number) {
@@ -108,8 +105,8 @@ export class TalknRedis {
     this.subClient.subscribe(key, (message) => callback(key, message));
   }
 
-  public async publish(key: string, message: RedisMessage) {
-    this.pubClient.publish(key, JSON.stringify(message));
+  public async publish(connection: Connection, message: RedisMessage) {
+    this.pubClient.publish(connection, JSON.stringify(message));
   }
 }
 

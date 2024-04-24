@@ -13,8 +13,8 @@ import conf from '@server/conf';
 
 import { ListensReturn } from '.';
 import { isValidKey } from '@common/utils';
-import TalknRedis, { RedisClients, RedisMessage } from './redis';
-import { ChConfig } from '@common/models/ChConfig';
+import TalknRedis, { RedisClients, RedisMessage, RedisMessageMethod } from './redis';
+import { ChConfig, ChConfigJson } from '@common/models/ChConfig';
 
 const { serverOption, redis } = conf;
 const { limit } = redis;
@@ -31,11 +31,17 @@ export type ConnectionType =
   | typeof connectionTypeUnContractTop
   | typeof connectionTypeUnContract;
 
+export const rankTypeChildren = 'rank';
+export const rankTypeAllChildren = 'rankAll';
+export type RankType = typeof rankTypeChildren | typeof rankTypeAllChildren;
+
 // io、redisインスタンスを跨ぐ処理を定義
 class TalknIo {
   static namespace: string = ChModel.rootConnection;
-  chConfig: ChConfig;
   topConnection: string;
+  chConfigJson: ChConfigJson;
+  myChConfig: ChConfig;
+  myChClassConfig: ChConfig[];
   server: Server;
   redis: TalknRedis;
   public get isRootServer() {
@@ -44,15 +50,26 @@ class TalknIo {
   public get topConnectionUserCnt(): number {
     return this.server.engine.clientsCount;
   }
-  constructor(topConnection: string, listend: ListensReturn, chConfig: ChConfig) {
+  constructor(
+    topConnection: string,
+    chConfigJson: ChConfigJson,
+    myChConfig: ChConfig,
+    myChClassConfig: ChConfig[],
+    listend: ListensReturn
+  ) {
     const { httpsServer, redis } = listend;
 
-    this.chConfig = chConfig;
     this.topConnection = topConnection;
+    this.chConfigJson = chConfigJson;
+    this.myChConfig = myChConfig;
+    this.myChClassConfig = myChClassConfig;
     this.server = new Server(httpsServer, serverOption);
     this.server.adapter(createAdapter(redis.ioAdapters.pub, redis.ioAdapters.sub));
     this.redis = redis;
 
+    // そもそもioサーバー
+    // chConfigに存在しているが、待ち受けるhttpsサーバーが存在しないとエラーになる。
+    this.handleOnSubscribe = this.handleOnSubscribe.bind(this);
     this.handleOnSubscribe();
   }
 
@@ -91,42 +108,72 @@ class TalknIo {
    * REDIS
    ************/
 
-  // 自分自身のconnectionでのsubscribeを受け付ける
+  // 自分自身のconnectionでのみsubscribeを受け付ける
   private async handleOnSubscribe() {
-    // define
-    const { chConfig } = this;
-    const subscribeRankKey = `${tuneOptionRank}:${chConfig.connection}`;
-    const subscribeRankAllKey = `${tuneOptionRankAll}:${chConfig.connection}`;
-    const callback = async (methodKey: string, message: string) => {
-      const [type, connection] = methodKey.split(':');
+    const { myChConfig } = this;
+    const callback = async (connection: Connection, message: string) => {
       const redisMessage = JSON.parse(message) as RedisMessage;
-      switch (type) {
-        case tuneOptionRank:
-          await this.putChRank(connection, redisMessage.connection, redisMessage.liveCnt);
-          break;
-        case tuneOptionRankAll:
-          await this.putChRankAll(redisMessage.connection, redisMessage.liveCnt);
-          break;
-      }
+      const { method } = redisMessage;
+      const subscribeMethods = this.getSubscribeMethods(redisMessage);
+      subscribeMethods[method](redisMessage);
     };
 
-    // logics
-    this.redis.subscribe(subscribeRankKey, callback);
-    this.redis.subscribe(subscribeRankAllKey, callback);
+    // TODO: myChConfigの子供までをONする
+    this.redis.subscribe(myChConfig.connection, callback);
   }
 
-  async getChRank(methodKey: string, connection: ParentConnection | Connection): Promise<LightRank[]> {
+  private getSubscribeMethods(redisMessage: RedisMessage) {
+    const subscribeConnection: Connection = this.myChConfig.connection;
+
+    const getNewRank = async (rankType: RankType, connection: Connection): Promise<LightRank[]> => {
+      const oldRank = await this.getChRank(rankType, subscribeConnection);
+      let newRank: LightRank[] = [];
+
+      let isExistConnection = false;
+      if (oldRank.length > 0) {
+        isExistConnection = Boolean(oldRank.find((or) => or.connection === connection));
+      }
+
+      if (isExistConnection) {
+        newRank = oldRank.map((or) => (or.connection === connection ? { ...or, liveCnt: redisMessage.liveCnt } : or));
+      }
+      return newRank;
+    };
+
+    return {
+      rank: async (redisMessage: RedisMessage) => {
+        const { connections, liveCnt } = redisMessage;
+        connections.forEach((connection) => {
+          const newRank = getNewRank(tuneOptionRank, connection);
+          this.putChRank(tuneOptionRank, subscribeConnection, connection, liveCnt);
+          this.broadcast(tuneOptionRank, subscribeConnection, { rank: newRank });
+        });
+      },
+      rankAll: (redisMessage: RedisMessage) => {
+        const { connections, liveCnt } = redisMessage;
+        connections.forEach((connection) => {
+          const newRank = getNewRank(tuneOptionRankAll, connection);
+          this.putChRank(tuneOptionRankAll, subscribeConnection, connection, liveCnt);
+          this.broadcast(tuneOptionRankAll, subscribeConnection, { rank: newRank });
+        });
+      },
+    };
+  }
+
+  async getChRank(rankType: RankType, parentConnection: ParentConnection): Promise<LightRank[]> {
     let rank: LightRank[] = [];
-    const scores = await this.redis.getScores(methodKey, connection);
-    if (scores.length > 0) {
-      rank = scores.map((score) => new LightRankModel(score) as LightRank);
+    if (parentConnection) {
+      const scores = await this.redis.getScores(`${rankType}:${parentConnection}`);
+      if (scores.length > 0) {
+        rank = scores.map((score) => new LightRankModel(score) as LightRank);
+      }
     }
     return rank;
   }
 
-  public async putChRank(parentConnection: ParentConnection, tuneConnection: Connection, liveCnt: number) {
+  public async putChRank(rankType: RankType, parentConnection: ParentConnection, tuneConnection: Connection, liveCnt: number) {
     if (parentConnection) {
-      await this.redis.putScore(`${tuneOptionRank}:${parentConnection}`, tuneConnection, liveCnt);
+      await this.redis.putScore(`${rankType}:${parentConnection}`, tuneConnection, liveCnt);
     }
   }
 

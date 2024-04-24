@@ -5,13 +5,16 @@ import { LightRank, LightRankModel } from '@server/common/models/Rank';
 import TalknIo from '@server/listens/io';
 
 const tuneMethods: { [key in keyof TuneOption]: Function } = {
-  rank: async (talknIo: TalknIo, parentConnection: ParentConnection, tuneConnection: Connection, liveCnt: number) => {
+  rank: async (talknIo: TalknIo, tuneConnection: Connection) => {
+    /*
     let parentBelongRank: LightRank[] = [];
     let selfBelongRank: LightRank[] = [];
+    let rank: LightRank[] = [];
 
     if (tuneConnection === ChModel.rootConnection) {
       selfBelongRank = await talknIo.getChRank(tuneOptionRank, tuneConnection);
     } else {
+
       parentBelongRank = await talknIo.getChRank(tuneOptionRank, parentConnection);
       const isIncludeTuneConnection = Boolean(parentBelongRank.find((pr) => pr.connection === tuneConnection));
       if (isIncludeTuneConnection) {
@@ -25,6 +28,8 @@ const tuneMethods: { [key in keyof TuneOption]: Function } = {
     }
 
     return { parentBelongRank, selfBelongRank };
+    */
+    return await talknIo.getChRank(tuneOptionRank, tuneConnection);
   },
   rankAll: async (talknIo: TalknIo, parentConnection: ParentConnection, tuneConnection: Connection, response: Partial<Response>) => {
     // 契約サーバーの場合、/にrankAllが反映されていない

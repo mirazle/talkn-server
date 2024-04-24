@@ -1,9 +1,9 @@
 import { Socket } from 'socket.io';
-import ChModel, { Connection } from '@common/models/Ch';
-import { ChConfig } from '@common/models/ChConfig';
+import ChModel, { Connection, ParentConnection } from '@common/models/Ch';
+import ChConfigModel, { ChConfig } from '@common/models/ChConfig';
 import { tuneOptionRank, tuneOptionRankAll } from '@common/models/TuneOption';
 import logics from '@server/endpoints/logics';
-import TalknIo from '@server/listens/io';
+import TalknIo, { RankType } from '@server/listens/io';
 import { Types } from '@server/common/models';
 import { LightRank } from '@common/models/Rank';
 
@@ -30,15 +30,51 @@ export default async (talknIo: TalknIo, socket: Socket, chConfig: ChConfig, requ
 
   if (tuneConnection.startsWith(topConnection)) {
     // fix status
+    const chConfigJson = talknIo.chConfigJson;
+    const myChRootsConnections = ChConfigModel.getMyChRootsConnections({ chConfigJson, tuneConnection });
+    const connections = ChModel.getConnections(tuneConnection, { isReverse: true, isSelfExclude: true });
+    const myConnectionClass = ChModel.getMyConnectionClass(topConnection, connections);
     const parentConnection = ChModel.getParentConnection(tuneConnection);
     const liveCnt = talknIo.getLiveCnt(socket, tuneConnection, true);
+
+    console.log('IN', myChRootsConnections);
 
     // broardcast tune.
     const tuneCh = ChModel.getChParams({ tuneId, host, connection: tuneConnection, liveCnt, chConfig }) as Types['Ch'];
     const response = { tuneCh };
     await talknIo.broadcast('tune', tuneConnection, response);
 
-    // publish
+    // rank(publish)
+    // chの所有物
+    //    自身のliveCnt -> broardcast
+    //    自身が所有するランキング(子供chのランキング) -> broardcast
+    //    親chに自身のliveCntを通知 -> publish(publishConnection, {method, rankType, connection, liveCnt})
+    //
+    //      subscribe(publishConnection, {method, rankType, connection, liveCnt})
+    //        subscribes[method](tuneConnection, {publishConnection, method: rankType, connection, liveCnt})
+    //
+    //          const oldRank = talknIo.getChRank(rankType, tuneConnection);
+    //          const rank = liveCntを反映
+    //          talknIo.broardcast(rankType, tuneConnection, rank);
+    //
+    //          talknIo.putChRank(rankType, parentConnection, childConnection, liveCnt);
+    //      }
+    //
+    //
+    // 自分が所有するランキングを返す
+    // 自分の親が所有するランキングを返すようにpublishする
+    // 更新責任は親ch
+
+    // rank
+    const rank = await logics.tuneMethods[tuneOptionRank]!(talknIo, parentConnection, tuneConnection, response);
+    await talknIo.broadcast(tuneOptionRank, tuneConnection, { rank });
+
+    // 自分が所属するtopConnection
+    // topConnectionにpublishする
+    if (topConnection !== tuneConnection) {
+      talknIo.redis.publish(topConnection, { method: tuneOptionRank, connections: myConnectionClass, liveCnt });
+    }
+
     /*
       /aa.com/11/22/33/44/で接続した場合
           [liveCnt]
