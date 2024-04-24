@@ -114,6 +114,7 @@ make -j$(nproc)
 sudo make install
 
 echo 'export PATH=/usr/local/openresty/bin:$PATH' >> ~/.bash_profile
+export PATH=$PATH:/usr/local/openresty/nginx/sbin
 source ~/.bash_profile
 ```
 
