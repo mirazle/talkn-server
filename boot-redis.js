@@ -13,50 +13,47 @@ if (!fs.existsSync(REDIS_CLUSTER_TMP_PATH)) {
   fs.mkdirSync(REDIS_CLUSTER_TMP_PATH, { recursive: true });
 }
 
-const flushRedisServer = ({ host, port }) => {
-  return new Promise((resolve, reject) => {
-    exec(`redis-cli -h ${host} -p ${port} flushall`, (error, stdout) => {
-      if (error) {
-        console.error(`Failed to flush Redis server at ${host}:${port}`, error);
-        reject(error);
-      } else {
-        console.log(`Redis server at ${host}:${port} flushed`);
-        resolve();
-      }
-    });
-  });
-};
-
 const startRedisServer = ({ host, port }, isCluster = false) => {
   const tempConfigFile = `${REDIS_CLUSTER_TMP_PATH}${port}/redis-server.conf`;
-
-  if (!fs.existsSync(`${REDIS_CLUSTER_TMP_PATH}${port}/`)) {
-    fs.mkdirSync(`${REDIS_CLUSTER_TMP_PATH}${port}/`, { recursive: true });
-  }
-
-  if (isCluster) {
+  try {
+    if (!fs.existsSync(`${REDIS_CLUSTER_TMP_PATH}${port}/`)) {
+      fs.mkdirSync(`${REDIS_CLUSTER_TMP_PATH}${port}/`, { recursive: true });
+    }
     fs.copyFileSync(REDIS_CLUSTER_CONFIG_BASE_FILE, tempConfigFile);
-    fs.appendFileSync(tempConfigFile, `\ncluster-enabled yes`);
-    fs.appendFileSync(tempConfigFile, `\ncluster-config-file ${REDIS_CLUSTER_TMP_PATH}${port}/nodes.conf`);
-    fs.appendFileSync(tempConfigFile, `\ncluster-node-timeout 5000`);
-    fs.appendFileSync(tempConfigFile, `\nport ${port}`);
-  } else {
-    fs.copyFileSync(REDIS_SERVER_CONFIG_BASE_FILE, tempConfigFile);
-    fs.appendFileSync(tempConfigFile, `\nport ${port}`);
-  }
+    fs.chmodSync(tempConfigFile, 0o777);
 
-  console.log(`Starting Redis server on ${host}:${port}`);
-  exec(`redis-server ${tempConfigFile} &`);
+    if (isCluster) {
+      fs.appendFileSync(tempConfigFile, `\ncluster-enabled yes`);
+      //      fs.appendFileSync(tempConfigFile, `\ncluster-config-file ${REDIS_CLUSTER_TMP_PATH}${port}/nodes.conf`);
+
+      fs.appendFileSync(tempConfigFile, `\ncluster-node-timeout 5000`);
+      fs.appendFileSync(tempConfigFile, `\ndir ${REDIS_CLUSTER_TMP_PATH}${port}/`);
+      fs.appendFileSync(tempConfigFile, `\nport ${port}`);
+    } else {
+      fs.writeFileSync(`${REDIS_CLUSTER_TMP_PATH}${port}/redis.log`, '');
+      fs.appendFileSync(tempConfigFile, `\nlogfile ${REDIS_CLUSTER_TMP_PATH}${port}/redis.log`);
+
+      fs.copyFileSync(REDIS_SERVER_CONFIG_BASE_FILE, tempConfigFile);
+      fs.appendFileSync(tempConfigFile, `\ndir ${REDIS_CLUSTER_TMP_PATH}${port}/`);
+      fs.appendFileSync(tempConfigFile, `\nport ${port}`);
+    }
+
+    console.log(`1. redis-server ${tempConfigFile} &`);
+    exec(`redis-server ${tempConfigFile} &`);
+  } catch (err) {
+    console.error('Error writing file:', err);
+  }
 };
 
 const checkRedisServer = ({ host, port }) => {
   return new Promise((resolve, reject) => {
     const check = () => {
+      console.log(`2. redis-cli -h ${host} -p ${port} ping`);
       exec(`redis-cli -h ${host} -p ${port} ping`, (error, stdout) => {
         if (!error && stdout.includes('PONG')) {
-          console.log(`Redis server at ${host}:${port} is responsive`);
           resolve();
         } else {
+          console.log(`error: ${error}`);
           setTimeout(check, 1000); // Try again in 1 second
         }
       });
@@ -65,14 +62,28 @@ const checkRedisServer = ({ host, port }) => {
   });
 };
 
-const resetRedisServer = async ({ host, port }) => {
-  await new Promise((resolve, reject) => {
-    exec(`redis-cli -h ${host} -p ${port} cluster reset`, (error, stdout) => {
+const flushRedisServer = ({ host, port }) => {
+  return new Promise((resolve, reject) => {
+    console.log(`3. redis-cli -h ${host} -p ${port} flushall`);
+    exec(`redis-cli -h ${host} -p ${port} flushall`, (error, stdout) => {
       if (error) {
-        console.error(`Failed to reset Redis server at ${host}:${port}`, error);
+        console.error(`error: Failed to flush Redis server at ${host}:${port}`, error);
         reject(error);
       } else {
-        console.log(`Redis server at ${host}:${port} reset successfully`);
+        resolve();
+      }
+    });
+  });
+};
+
+const resetRedisServer = async ({ host, port }) => {
+  await new Promise((resolve, reject) => {
+    console.log(`4. redis-cli -h ${host} -p ${port} cluster reset`);
+    exec(`redis-cli -h ${host} -p ${port} cluster reset`, (error, stdout) => {
+      if (error) {
+        console.error(`error: Failed to reset Redis server at ${host}:${port}`, error);
+        reject(error);
+      } else {
         resolve();
       }
     });

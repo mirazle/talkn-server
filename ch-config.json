@@ -1,7 +1,7 @@
 {
   "nginx": { "location": "/", "proxyWssServer": "127.0.0.1", "proxyWssPort": 10444 },
   "redis": {
-    "client": { "host": "127.0.0.1", "port": 6380 },
+    "client": { "host": "127.0.0.1", "port": 6379 },
     "cluster": [
       { "host": "127.0.0.1", "port": 6381 },
       { "host": "127.0.0.1", "port": 6382 },
@@ -16,7 +16,7 @@
     {
       "nginx": { "location": "aa.com/", "proxyWssServer": "127.0.0.1", "proxyWssPort": 10445 },
       "redis": {
-        "client": { "host": "127.0.0.1", "port": 6390 },
+        "client": { "host": "127.0.0.1", "port": 6379 },
         "cluster": [
           { "host": "127.0.0.1", "port": 6391 },
           { "host": "127.0.0.1", "port": 6392 },
@@ -29,9 +29,9 @@
       "accept": { "rankAll": false },
       "children": [
         {
-          "nginx": { "location": "11/", "proxyWssServer": "127.0.0.1", "proxyWssPort": 10446 },
+          "nginx": { "location": "11/22/33/", "proxyWssServer": "127.0.0.1", "proxyWssPort": 10446 },
           "redis": {
-            "client": { "host": "127.0.0.1", "port": 6400 },
+            "client": { "host": "127.0.0.1", "port": 6379 },
             "cluster": [
               { "host": "127.0.0.1", "port": 6401 },
               { "host": "127.0.0.1", "port": 6402 },
@@ -49,7 +49,7 @@
     {
       "nginx": { "location": "bb.com/", "proxyWssServer": "127.0.0.1", "proxyWssPort": 10447 },
       "redis": {
-        "client": { "host": "127.0.0.1", "port": 6410 },
+        "client": { "host": "127.0.0.1", "port": 6379 },
         "cluster": [
           { "host": "127.0.0.1", "port": 6411 },
           { "host": "127.0.0.1", "port": 6412 },
@@ -64,7 +64,7 @@
         {
           "nginx": { "location": "11/22/", "proxyWssServer": "127.0.0.1", "proxyWssPort": 10448 },
           "redis": {
-            "client": { "host": "127.0.0.1", "port": 6420 },
+            "client": { "host": "127.0.0.1", "port": 6379 },
             "cluster": [
               { "host": "127.0.0.1", "port": 6421 },
               { "host": "127.0.0.1", "port": 6422 },
@@ -79,7 +79,7 @@
             {
               "nginx": { "location": "BBBB/", "proxyWssServer": "127.0.0.1", "proxyWssPort": 10449 },
               "redis": {
-                "client": { "host": "127.0.0.1", "port": 6430 },
+                "client": { "host": "127.0.0.1", "port": 6379 },
                 "cluster": [
                   { "host": "127.0.0.1", "port": 6431 },
                   { "host": "127.0.0.1", "port": 6432 },
@@ -99,7 +99,7 @@
     {
       "nginx": { "location": "cc.com/", "proxyWssServer": "127.0.0.1", "proxyWssPort": 10450 },
       "redis": {
-        "client": { "host": "127.0.0.1", "port": 6440 },
+        "client": { "host": "127.0.0.1", "port": 6379 },
         "cluster": [
           { "host": "127.0.0.1", "port": 6441 },
           { "host": "127.0.0.1", "port": 6442 },
@@ -115,7 +115,7 @@
     {
       "nginx": { "location": "dd.com/", "proxyWssServer": "127.0.0.1", "proxyWssPort": 10451 },
       "redis": {
-        "client": { "host": "127.0.0.1", "port": 6450 },
+        "client": { "host": "127.0.0.1", "port": 6379 },
         "cluster": [
           { "host": "127.0.0.1", "port": 6451 },
           { "host": "127.0.0.1", "port": 6452 },
@@ -130,7 +130,7 @@
         {
           "nginx": { "location": "a11/b22/", "proxyWssServer": "127.0.0.1", "proxyWssPort": 10452 },
           "redis": {
-            "client": { "host": "127.0.0.1", "port": 6460 },
+            "client": { "host": "127.0.0.1", "port": 6379 },
             "cluster": [
               { "host": "127.0.0.1", "port": 6461 },
               { "host": "127.0.0.1", "port": 6462 },
@@ -145,7 +145,7 @@
             {
               "nginx": { "location": "sBBBB/", "proxyWssServer": "127.0.0.1", "proxyWssPort": 10453 },
               "redis": {
-                "client": { "host": "127.0.0.1", "port": 6470 },
+                "client": { "host": "127.0.0.1", "port": 6379 },
                 "cluster": [
                   { "host": "127.0.0.1", "port": 6471 },
                   { "host": "127.0.0.1", "port": 6472 },

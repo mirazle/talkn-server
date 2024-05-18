@@ -1,4 +1,4 @@
-# 環境構築(Mac)
+# 環境構築(macOS Sonoma 14.4.1)
 
 dmg をインストールしてデーモンを実行
 https://docs.docker.com/desktop/install/mac-install/
@@ -9,6 +9,38 @@ docker login
 docker-compose build
 docker-compose up
 ```
+
+# https://localhost
+
+openssl req -x509 -out localhost.crt -keyout localhost.key \
+ -newkey rsa:2048 -nodes -sha256 \
+ -subj '/CN=localhost' -days 365 -extensions EXT -config <( \
+ printf "[dn]\nCN=localhost\n[req]\ndistinguished_name = dn\n[EXT]\nsubjectAltName=DNS:localhost,DNS:assets.localhost,DNS:client.localhost,DNS:cover.localhost,DNS:components.localhost,DNS:cover.localhost,DNS:api.localhost,DNS:ext.localhost,DNS:tune.localhost,DNS:www.localhost,DNS:own.localhost \nkeyUsage=digitalSignature\nextendedKeyUsage=serverAuth")
+
+# brew インストール
+
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> ~/.zprofile
+eval "$(/opt/homebrew/bin/brew shellenv)"
+
+brew install redis
+brew tap openresty/bre
+brew install openresty
+
+# 関連リポジトリ
+
+https://github.com/mirazle/talkn-common.git
+https://github.com/mirazle/talkn-server.git
+https://github.com/mirazle/talkn-api.git
+
+# nvm
+
+brew install nvm
+
+echo 'export NVM_DIR="$HOME/.nvm"' >> ~/.zshrc
+echo '[ -s "/opt/homebrew/opt/nvm/nvm.sh" ] && \. "/opt/homebrew/opt/nvm/nvm.sh"' >> ~/.zshrc
+echo '[ -s "/opt/homebrew/opt/nvm/etc/bash_completion.d/nvm" ] && \. "/opt/homebrew/opt/nvm/etc/bash_completion.d/nvm"' >> ~/.zshrc
+source ~/.zshrc
 
 # ローカル開発
 
@@ -59,6 +91,22 @@ TCP バックログ(待ち受け可能な TCP セッション数)の OS のデ�
 ```
 sudo sysctl -w kern.ipc.somaxconn=512
 sysctl kern.ipc.somaxconn
+```
+
+```
+sudo dscl . -create /Groups/redis
+sudo dscl . -create /Groups/redis RealName "Redis Server Group"
+sudo dscl . -create /Groups/redis gid 700
+
+sudo dscl . -create /Users/redis
+sudo dscl . -create /Users/redis UserShell /usr/bin/false
+sudo dscl . -create /Users/redis RealName "Redis Server User"
+sudo dscl . -create /Users/redis UniqueID "701"
+sudo dscl . -create /Users/redis PrimaryGroupID "701"
+sudo dscl . -create /Users/redis NFSHomeDirectory /var/empty
+
+sudo chown -R redis:redis /path/to/your/redis-directory
+
 ```
 
 ## apache-kafka
