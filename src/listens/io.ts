@@ -67,8 +67,7 @@ class TalknIo {
     this.server.adapter(createAdapter(redis.ioAdapters.pub, redis.ioAdapters.sub));
     this.redis = redis;
 
-    // そもそもioサーバー
-    // chConfigに存在しているが、待ち受けるhttpsサーバーが存在しないとエラーになる。
+    // そもそもioサーバー、chConfigに存在しているが、待ち受けるhttpsサーバーが存在しないとエラーになる。
     this.handleOnSubscribe = this.handleOnSubscribe.bind(this);
     this.handleOnSubscribe();
   }
@@ -97,10 +96,11 @@ class TalknIo {
 
   async broadcast(type: string, connection: ParentConnection | Connection, response: Partial<Responses>) {
     if (connection) {
-      // console.log('@@@@@@@@@ BROARDCAST', type, connection, { ...response, type });
-      this.server.emit(connection, { ...response, type });
+      const key = `${type}:${connection}`;
+      // console.log('@ BROARDCAST', key, { ...response, type });
+      this.server.emit(key, { ...response, type });
     } else {
-      console.warn('No Connection');
+      console.warn('No Connection', type, connection);
     }
   }
 
@@ -118,44 +118,47 @@ class TalknIo {
       subscribeMethods[method](redisMessage);
     };
 
-    // TODO: myChConfigの子供までをONする
     this.redis.subscribe(myChConfig.connection, callback);
   }
 
   private getSubscribeMethods(redisMessage: RedisMessage) {
-    const subscribeConnection: Connection = this.myChConfig.connection;
-
-    const getNewRank = async (rankType: RankType, connection: Connection): Promise<LightRank[]> => {
-      const oldRank = await this.getChRank(rankType, subscribeConnection);
+    const getNewRank = async (
+      rankType: RankType,
+      keyConnection: ParentConnection,
+      valueConnection: Connection,
+      liveCnt: Number
+    ): Promise<LightRank[]> => {
+      const oldRank = await this.getChRank(rankType, keyConnection);
       let newRank: LightRank[] = [];
 
-      let isExistConnection = false;
-      if (oldRank.length > 0) {
-        isExistConnection = Boolean(oldRank.find((or) => or.connection === connection));
+      if (oldRank.length === 0) {
+        return [{ connection: valueConnection, liveCnt }] as LightRank[];
+      } else {
+        const isFindConnection = Boolean(oldRank.find((r) => r.connection === valueConnection));
+        newRank = isFindConnection
+          ? oldRank.map((or) => (or.connection === valueConnection ? ({ ...or, liveCnt } as LightRank) : or))
+          : ([...oldRank, { connection: valueConnection, liveCnt }] as LightRank[]);
+        return newRank.sort((a, b) => b.liveCnt - a.liveCnt);
       }
-
-      if (isExistConnection) {
-        newRank = oldRank.map((or) => (or.connection === connection ? { ...or, liveCnt: redisMessage.liveCnt } : or));
-      }
-      return newRank;
     };
 
     return {
       rank: async (redisMessage: RedisMessage) => {
-        const { connections, liveCnt } = redisMessage;
-        connections.forEach((connection) => {
-          const newRank = getNewRank(tuneOptionRank, connection);
-          this.putChRank(tuneOptionRank, subscribeConnection, connection, liveCnt);
-          this.broadcast(tuneOptionRank, subscribeConnection, { rank: newRank });
-        });
+        const { registConnections, valueConnection, liveCnt } = redisMessage;
+        const keyConnection = registConnections[0];
+        const newRank = await getNewRank(tuneOptionRank, keyConnection, valueConnection, liveCnt);
+        this.broadcast(tuneOptionRank, keyConnection, { rank: newRank });
+        this.putChRank(tuneOptionRank, keyConnection, valueConnection, liveCnt);
       },
-      rankAll: (redisMessage: RedisMessage) => {
-        const { connections, liveCnt } = redisMessage;
-        connections.forEach((connection) => {
-          const newRank = getNewRank(tuneOptionRankAll, connection);
-          this.putChRank(tuneOptionRankAll, subscribeConnection, connection, liveCnt);
-          this.broadcast(tuneOptionRankAll, subscribeConnection, { rank: newRank });
-        });
+      rankAll: async (redisMessage: RedisMessage) => {
+        const { registConnections, valueConnection, liveCnt } = redisMessage;
+
+        for (const i in registConnections) {
+          const keyConnection = registConnections[i];
+          const newRank = await getNewRank(tuneOptionRankAll, keyConnection, valueConnection, liveCnt);
+          this.broadcast(tuneOptionRankAll, keyConnection, { rankAll: newRank });
+          this.putChRank(tuneOptionRankAll, keyConnection, valueConnection, liveCnt);
+        }
       },
     };
   }

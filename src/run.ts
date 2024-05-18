@@ -16,10 +16,10 @@ fs.readFile('ch-config.json', 'utf8', async (err, json) => {
   try {
     const chConfigJson = JSON.parse(json) as ChConfigJson;
     const myChConfig = ChConfigModel.getMyChConfig({ chConfigJson, topConnection });
-    const myChRootsConfig = ChConfigModel.getMyChRootsConfig({ chConfigJson, tuneConnection: topConnection });
+    const myChRootsConfig = ChConfigModel.getChRootsConfig({ chConfigJson, tuneConnection: topConnection });
 
     console.info('@@@@@@@@@@@ TOP CONNECTION @@@@@@@@@@@');
-    console.info(topConnection);
+    console.info(topConnection, myChConfig.nginx.proxyWssServer, myChConfig.nginx.proxyWssPort);
     console.info('@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@');
 
     const listend = await listens(topConnection, myChConfig);

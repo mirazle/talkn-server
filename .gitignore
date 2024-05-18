@@ -1,6 +1,6 @@
 node_modules/
 dist/
-logs/
+logs/*
 nginx/nginx.pid
 isolate-*
 processed.txt

@@ -3,10 +3,10 @@ import { exec, spawn } from 'child_process';
 import { RedisClientType, createClient } from 'redis';
 
 import conf from '@server/conf';
-import { ChConfig, Redis as RedisConfig } from '@common/models/ChConfig';
+import ChConfigModel, { ChConfig, Redis as RedisConfig } from '@common/models/ChConfig';
 import ChModel, { Connection, ParentConnection } from '@common/models/Ch';
 import { tuneOptionRank, tuneOptionRankAll } from '@common/models/TuneOption';
-import { RangeWithScore } from '@server/common/models/Rank';
+import { RangeWithScore } from '@common/models/Rank';
 
 const { serverOption, redis } = conf;
 const { limit } = redis;
@@ -15,7 +15,8 @@ export type RedisMessageMethod = typeof tuneOptionRank | typeof tuneOptionRankAl
 
 export type RedisMessage = {
   method: RedisMessageMethod;
-  connections: Connection[];
+  registConnections: Connection[];
+  valueConnection: Connection;
   liveCnt: number;
 };
 
@@ -105,8 +106,10 @@ export class TalknRedis {
     this.subClient.subscribe(key, (message) => callback(key, message));
   }
 
-  public async publish(connection: Connection, message: RedisMessage) {
-    this.pubClient.publish(connection, JSON.stringify(message));
+  public async publish(key: Connection, message: RedisMessage) {
+    if (key) {
+      this.pubClient.publish(key, JSON.stringify(message));
+    }
   }
 }
 
