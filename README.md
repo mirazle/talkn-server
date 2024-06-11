@@ -5,6 +5,7 @@ https://docs.docker.com/desktop/install/mac-install/
 
 ```
 brew install docker
+brew install docker-compose
 docker login
 docker-compose build
 docker-compose up

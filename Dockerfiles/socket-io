@@ -1,22 +1,55 @@
+# 基本イメージとしてAmazon Linux 2023を使用
 FROM amazonlinux:2023
 
+# 環境変数の設定
 ENV NVM_DIR /root/.nvm
-ENV NODE_VERSION 20.10.0
+ENV NODE_VERSION 22.0.0
 ENV PATH $NVM_DIR/versions/node/v$NODE_VERSION/bin:$PATH
 
+# 必要なパッケージのインストール
 RUN yum update -y && \
-    yum install -y tar xz git && \
-    yum groupinstall -y "Development Tools"
+yum install -y --allowerasing gcc make curl git tar xz unzip pcre pcre-devel openssl openssl-devel perl zlib zlib-devel certbot
 
-RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.1/install.sh | bash
-RUN . "$NVM_DIR/nvm.sh" && nvm install $NODE_VERSION && nvm use $NODE_VERSION && nvm alias default $NODE_VERSION
-RUN npm install -g typescript
+# OpenRestyのインストール
+RUN curl -L https://openresty.org/download/openresty-1.21.4.1.tar.gz -o openresty.tar.gz && \
+tar -zxvf openresty.tar.gz && \
+cd openresty-1.21.4.1 && \
+./configure --with-http_ssl_module && \
+make && \
+make install
 
-WORKDIR /app
-COPY package*.json ./
+ENV PATH="/usr/local/openresty/nginx/sbin:/usr/local/openresty/bin:$PATH"
+
+# echo 'export PATH=/usr/local/openresty/bin:$PATH' >> ~/.bash_profile
+# export PATH=$PATH:/usr/local/openresty/nginx/sbin
+# source ~/.bash_profile
+
+# nvm
+RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.1/install.sh | bash && \
+. "$NVM_DIR/nvm.sh" && \
+nvm install $NODE_VERSION && \
+nvm use $NODE_VERSION && \
+nvm alias default $NODE_VERSION && \
+npm install -g typescript
+
+# Redisのソースコードをダウンロードしてビルド
+RUN curl -O http://download.redis.io/redis-stable.tar.gz && \
+tar xvzf redis-stable.tar.gz && \
+cd redis-stable && \
+make && \
+make install
+
+# talkn-commonディレクトリの設定と依存関係のインストール
+WORKDIR /usr/src/app/talkn-common
+COPY ../talkn-common ./
 RUN npm install
-COPY . .
-
 RUN tsc
-# EXPOSE 3000
-CMD ["node", "dist/app.js"]
+
+# talkn-serverディレクトリの設定と依存関係のインストール
+WORKDIR /usr/src/app/talkn-server
+COPY ../talkn-server ./
+RUN npm install
+RUN tsc
+
+# アプリケーションの実行
+CMD ["node", "dist/talkn-server/src/run.js"]

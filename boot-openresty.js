@@ -25,7 +25,7 @@ events {
 
 http {
   server {
-    listen 10443 ssl;
+    listen 10440 ssl;
     server_name 127.0.0.1;
     access_log  ${homeDirectory}/talkn-server/logs/access.log;
 
