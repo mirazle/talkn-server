@@ -11,13 +11,13 @@
     "noImplicitAny": true,
     "paths": {
       "@server/*": ["./src/*"],
-      "@common/*": ["../talkn-common/src/*"]
+      "@common/*": ["./common/src/*"]
     }
   },
   // コンパイル対象
   "include": [
     "src/**/*.ts", // src ディレクトリ内のすべての TypeScript ファイル
-    "../talkn-common/src/**/*.ts" // talkn-common ディレクトリ内の TypeScript ファイル
+    "common/src/**/*.ts" // talkn-common ディレクトリ内の TypeScript ファイル
   ],
   "exclude": [
     "node_modules", // node_modules ディレクトリを除外します

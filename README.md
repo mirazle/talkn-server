@@ -13,6 +13,13 @@ docker-compose up
 
 # https://localhost
 
+# talkn-common
+
+git submodule add https://github.com/mirazle/talkn-common.git ./common
+cd common
+mkdir certs
+cd certs
+
 openssl req -x509 -out localhost.crt -keyout localhost.key \
  -newkey rsa:2048 -nodes -sha256 \
  -subj '/CN=localhost' -days 365 -extensions EXT -config <( \
@@ -44,10 +51,6 @@ echo '[ -s "/opt/homebrew/opt/nvm/etc/bash_completion.d/nvm" ] && \. "/opt/homeb
 source ~/.zshrc
 
 # ローカル開発
-
-## talkn-common
-
-talkn-common リポジトリを clone します。
 
 ## redis-server
 

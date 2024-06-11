@@ -2,9 +2,11 @@ name: NodeJS with Webpack
 
 on:
   push:
-    branches: ['main']
+    branches:
+      - '*'
   pull_request:
-    branches: ['main']
+    branches:
+      - '*'
 
 jobs:
   build:
@@ -16,6 +18,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: true
 
       - name: Use Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v3
